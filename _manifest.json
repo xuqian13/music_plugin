@@ -1,0 +1,39 @@
+{
+  "manifest_version": 1,
+  "name": "网易云点歌插件",
+  "version": "0.1.0",
+  "description": "网易云点歌插件",
+  "author": {
+    "name": "靓仔",
+    "url": "https://github.com/xuqian13"
+  },
+  "license": "AGPL-3.0",
+  "host_application": {
+    "min_version": "0.8.0",
+    "max_version": "0.8.0"
+  },
+  "homepage_url": "https://github.com/xuqian13",
+  "repository_url": "https://github.com/xuqian13/music_plugin",
+  "keywords": [
+    "听歌",
+    "点歌",
+    "music",
+    "song"
+  ],
+  "categories": [
+    "music"
+  ],
+  "default_locale": "zh-CN",
+  "locales_path": "_locales",
+  "plugin_info": {
+    "is_built_in": false,
+    "plugin_type": "general",
+    "components": [
+      {
+        "type": "action",
+        "name": "music_plugin",
+        "description": "基于网易云音乐API的智能点歌插件，支持音乐搜索和点歌功能。"
+      }
+    ]
+  }
+}
