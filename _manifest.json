@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "name": "网易云点歌插件",
   "version": "0.1.0",
-  "description": "网易云点歌插件",
+  "description": "基于网易云音乐API的智能点歌插件，支持音乐搜索和点歌功能",
   "author": {
     "name": "靓仔",
     "url": "https://github.com/xuqian13"
