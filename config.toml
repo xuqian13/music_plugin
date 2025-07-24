@@ -1,11 +1,21 @@
 # music_plugin - 自动生成的配置文件
-# 网易云点歌插件
+# 网易云音乐点歌插件，支持音乐搜索和点歌功能
 
 # 插件基本配置
 [plugin]
 
 # 是否启用插件
 enabled = true
+
+
+# 组件启用控制
+[components]
+
+# 是否启用Action组件
+action_enabled = true
+
+# 是否启用Command组件
+command_enabled = true
 
 
 # API接口配置
@@ -22,7 +32,7 @@ timeout = 10
 [music]
 
 # 默认音质等级(1-9)
-default_quality = "9"
+default_quality = "7"
 
 # 最大搜索结果数
 max_search_results = 10
@@ -37,4 +47,9 @@ show_cover = false
 # 是否显示下载链接
 show_download_link = false
 
+# 是否显示音乐信息文本
+show_info_text = true
+
+# 是否以语音消息发送音乐（true=语音消息，false=音乐卡片）
+send_as_voice = false
 
