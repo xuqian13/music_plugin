@@ -99,6 +99,6 @@ send_as_voice = false    # 是否以语音消息发送音乐（true=语音消息
 
 - **版本**: 1.0.0
 - **作者**: 靓仔
-- **许可证**: MIT
+- **许可证**: AGPL-v3.0
 - **依赖**: aiohttp, requests
 - **兼容性**: MaiCore 0.9.0
