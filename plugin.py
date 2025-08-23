@@ -22,7 +22,8 @@ import aiohttp
 import json
 import requests
 import base64
-from src.plugin_system.apis import send_api, chat_api
+import asyncio  # 新增
+from src.plugin_system.apis import send_api, chat_api, database_api
 from src.plugin_system import (
     BasePlugin, register_plugin, BaseAction, BaseCommand,
     ComponentInfo, ActionActivationType, ChatMode
@@ -80,8 +81,7 @@ class MusicSearchAction(BaseAction):
     keyword_case_sensitive = False
 
     action_parameters = {
-        "song_name": "要搜索的歌曲名称",
-        "quality": "音质要求(1-9，可选)"
+        "song_name": "要搜索的歌曲名称"
     }
     action_require = [
         "用户想要听音乐时使用",
@@ -98,9 +98,8 @@ class MusicSearchAction(BaseAction):
         """执行音乐搜索"""
         try:
             # 获取参数
-            song_name = self.action_data.get("song_name", "").strip()
-            quality = self.action_data.get("quality", "")
 
+            song_name = self.action_data.get("song_name", "").strip()
             if not song_name:
                 await self.send_text("❌ 请告诉我你想听什么歌曲~")
                 return False, "缺少歌曲名称"
@@ -108,20 +107,25 @@ class MusicSearchAction(BaseAction):
             # 从配置获取设置
             api_url = self.get_config("api.base_url", "https://api.vkeys.cn")
             timeout = self.get_config("api.timeout", 10)
-            default_quality = self.get_config("music.default_quality", "9")
 
-            # 使用默认音质如果未指定
-            if not quality:
-                quality = default_quality
-
-            logger.info(f"{self.get_log_prefix()} 开始搜索音乐，歌曲：{song_name[:50]}..., 音质：{quality}")
+            logger.info(f"{self.get_log_prefix()} 开始搜索音乐，歌曲：{song_name[:50]}...")
 
             # 调用音乐API
-            music_info = await self._call_music_api(api_url, song_name, quality, timeout)
+            music_info = await self._call_music_api(api_url, song_name, timeout)
 
             if music_info:
                 # 发送音乐信息
                 await self._send_music_info(music_info)
+
+                # 记录动作信息
+                song_name_display = music_info.get('song', '未知歌曲')
+                singer_display = music_info.get('singer', '未知歌手')
+                await self.store_action_info(
+                    action_build_into_prompt=True,
+                    action_prompt_display=f"为用户搜索并推荐了音乐：{song_name_display} - {singer_display}",
+                    action_done=True
+                )
+
                 logger.info(f"{self.get_log_prefix()} 音乐搜索成功")
                 return True, f"成功找到音乐：{music_info.get('song', '未知')[:30]}..."
             else:
@@ -133,31 +137,30 @@ class MusicSearchAction(BaseAction):
             await self.send_text(f"❌ 音乐搜索出错: {e}")
             return False, f"音乐搜索出错: {e}"
 
-    async def _call_music_api(self, api_url: str, song_name: str, quality: str, timeout: int) -> Optional[dict]:
-        """调用音乐API搜索歌曲"""
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
-                params = {
-                    "word": song_name,
-                    "quality": quality,
-                    "choose": 1  # 选择第一首
-                }
+    async def _call_music_api(self, api_url: str, song_name: str, timeout: int, retries: int = 3, delay: float = 1.5) -> Optional[dict]:
+        """调用音乐API搜索歌曲，带重试机制"""
+        for attempt in range(1, retries + 1):
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+                    params = {
+                        "word": song_name,
+                        "choose": 1  # 选择第一首
+                    }
 
-                async with session.get(f"{api_url}/v2/music/netease", params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get("code") == 200:
-                            return data.get("data", {})
+                    async with session.get(f"{api_url}/v2/music/netease", params=params) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data.get("code") == 200:
+                                return data.get("data", {})
+                            else:
+                                logger.warning(f"{self.get_log_prefix()} API返回错误: {data.get('message', '未知错误')}")
                         else:
-                            logger.warning(f"{self.get_log_prefix()} API返回错误: {data.get('message', '未知错误')}")
-                            return None
-                    else:
-                        logger.warning(f"{self.get_log_prefix()} API请求失败，状态码: {response.status}")
-                        return None
-
-        except Exception as e:
-            logger.error(f"{self.get_log_prefix()} 调用音乐API出错: {e}")
-            return None
+                            logger.warning(f"{self.get_log_prefix()} API请求失败，状态码: {response.status}")
+            except Exception as e:
+                logger.error(f"{self.get_log_prefix()} 第{attempt}次调用音乐API出错: {e}")
+            if attempt < retries:
+                await asyncio.sleep(delay)
+        return None
 
     async def _send_music_info(self, music_info: dict):
         """发送音乐信息"""
@@ -165,8 +168,8 @@ class MusicSearchAction(BaseAction):
             song = music_info.get("song", "未知歌曲")
             singer = music_info.get("singer", "未知歌手")
             album = music_info.get("album", "未知专辑")
-            quality = music_info.get("quality", "未知音质")
             interval = music_info.get("interval", "未知时长")
+            kbps = music_info.get("kbps", "未知码率")
             cover = music_info.get("cover", "")
             link = music_info.get("link", "")
             url = music_info.get("url", "")
@@ -177,7 +180,7 @@ class MusicSearchAction(BaseAction):
             message += f"🎤 歌曲：{song}\n"
             message += f"👤 歌手：{singer}\n"
             message += f"💿 专辑：{album}\n"
-            message += f"🎧 音质：{quality}\n"
+            message += f"🎧 码率：{kbps}\n"
             message += f"⏱️ 时长：{interval}\n"
 
             if link:
@@ -242,7 +245,7 @@ class MusicCommand(BaseCommand):
         """获取日志前缀"""
         return f"[MusicCommand]"
 
-    async def execute(self) -> Tuple[bool, str]:
+    async def execute(self) -> Tuple[bool, str, bool]:
         """执行音乐点歌命令"""
         try:
             # 获取匹配的参数
@@ -250,57 +253,56 @@ class MusicCommand(BaseCommand):
 
             if not song_name:
                 await self.send_text("❌ 请输入正确的格式：/music 歌曲名")
-                return False, "缺少歌曲名称"
+                return False, "缺少歌曲名称", True
 
             # 从配置获取设置
             api_url = self.get_config("api.base_url", "https://api.vkeys.cn")
             timeout = self.get_config("api.timeout", 10)
-            quality = self.get_config("music.default_quality", "9")
 
-            logger.info(f"{self.get_log_prefix()} 执行点歌命令，歌曲：{song_name[:50]}..., 音质：{quality}")
+            logger.info(f"{self.get_log_prefix()} 执行点歌命令，歌曲：{song_name[:50]}...")
 
             # 调用音乐API
-            music_info = await self._call_music_api(api_url, song_name, quality, timeout)
+            music_info = await self._call_music_api(api_url, song_name, timeout)
 
             if music_info:
                 # 发送音乐信息
                 await self._send_detailed_music_info(music_info)
+
                 logger.info(f"{self.get_log_prefix()} 点歌成功")
-                return True, f"成功点歌：{music_info.get('song', '未知')[:30]}..."
+                return True, f"成功点歌：{music_info.get('song', '未知')[:30]}...", True
             else:
                 await self.send_text("❌ 未找到相关音乐，请尝试其他关键词")
-                return False, "未找到音乐"
+                return False, "未找到音乐", True
 
         except Exception as e:
             logger.error(f"{self.get_log_prefix()} 点歌命令执行出错: {e}")
             await self.send_text(f"❌ 点歌失败: {e}")
-            return False, f"点歌失败: {e}"
+            return False, f"点歌失败: {e}", True
 
-    async def _call_music_api(self, api_url: str, song_name: str, quality: str, timeout: int) -> Optional[dict]:
-        """调用音乐API搜索歌曲"""
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
-                params = {
-                    "word": song_name,
-                    "quality": quality,
-                    "choose": 1  # 选择第一首
-                }
+    async def _call_music_api(self, api_url: str, song_name: str, timeout: int, retries: int = 3, delay: float = 1.5) -> Optional[dict]:
+        """调用音乐API搜索歌曲，带重试机制"""
+        for attempt in range(1, retries + 1):
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+                    params = {
+                        "word": song_name,
+                        "choose": 1  # 选择第一首
+                    }
 
-                async with session.get(f"{api_url}/v2/music/netease", params=params) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get("code") == 200:
-                            return data.get("data", {})
+                    async with session.get(f"{api_url}/v2/music/netease", params=params) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data.get("code") == 200:
+                                return data.get("data", {})
+                            else:
+                                logger.warning(f"{self.get_log_prefix()} API返回错误: {data.get('message', '未知错误')}")
                         else:
-                            logger.warning(f"{self.get_log_prefix()} API返回错误: {data.get('message', '未知错误')}")
-                            return None
-                    else:
-                        logger.warning(f"{self.get_log_prefix()} API请求失败，状态码: {response.status}")
-                        return None
-
-        except Exception as e:
-            logger.error(f"{self.get_log_prefix()} 调用音乐API出错: {e}")
-            return None
+                            logger.warning(f"{self.get_log_prefix()} API请求失败，状态码: {response.status}")
+            except Exception as e:
+                logger.error(f"{self.get_log_prefix()} 第{attempt}次调用音乐API出错: {e}")
+            if attempt < retries:
+                await asyncio.sleep(delay)
+        return None
 
     async def _send_detailed_music_info(self, music_info: dict):
         """发送详细音乐信息"""
@@ -308,7 +310,6 @@ class MusicCommand(BaseCommand):
             song = music_info.get("song", "未知歌曲")
             singer = music_info.get("singer", "未知歌手")
             album = music_info.get("album", "未知专辑")
-            quality = music_info.get("quality", "未知音质")
             interval = music_info.get("interval", "未知时长")
             size = music_info.get("size", "未知大小")
             kbps = music_info.get("kbps", "未知码率")
@@ -323,7 +324,6 @@ class MusicCommand(BaseCommand):
             message += f"🎙️ 歌手：{singer}\n"
             message += f"💿 专辑：{album}\n"
             message += f"⏱️ 时长：{interval}\n"
-            message += f"🎯 音质：{quality}\n"
             message += f"📦 大小：{size}\n"
             message += f"📊 码率：{kbps}\n"
 
@@ -342,7 +342,7 @@ class MusicCommand(BaseCommand):
             if send_as_voice:
                 # 发送语音消息
                 if url:
-                    await self.send_type(message_type="voiceurl", content=url)
+                    await self.send_custom(message_type="voiceurl", content=url)
                     logger.info(f"{self.get_log_prefix()} 发送语音消息成功，URL: {url[:50]}...")
                 else:
                     logger.warning(f"{self.get_log_prefix()} 音乐URL为空，无法发送语音消息")
@@ -362,7 +362,7 @@ class MusicCommand(BaseCommand):
                     response = requests.get(cover, timeout=timeout)
                     if response.status_code == 200:
                         base64_image = base64.b64encode(response.content).decode('utf-8')
-                        await self.send_type(message_type="image", content=base64_image)
+                        await self.send_custom(message_type="image", content=base64_image)
                         logger.info(f"{self.get_log_prefix()} 发送封面成功")
                     else:
                         logger.warning(f"{self.get_log_prefix()} 获取封面失败，状态码: {response.status_code}")
