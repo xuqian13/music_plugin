@@ -1,5 +1,5 @@
 # music_plugin - 自动生成的配置文件
-# 网易云音乐点歌插件，支持音乐搜索和点歌功能
+# 基于网易云音乐API的智能点歌插件，支持音乐搜索和点歌功能。
 
 # 插件基本配置
 [plugin]
@@ -27,12 +27,24 @@ base_url = "https://api.vkeys.cn"
 # API请求超时时间(秒)
 timeout = 10
 
+# API请求失败重试次数
+retries = 3
+
+# 重试基础延迟时间（秒，使用指数退避）
+base_delay = 1.0
+
 
 # 音乐功能配置
 [music]
 
-# 默认音质等级(1-9)
-default_quality = "7"
+# 默认音乐源(netease=网易云音乐, qq=QQ音乐)
+default_source = "netease"
+
+# 网易云音乐默认音质等级(1-9)
+netease_quality = "7"
+
+# QQ音乐默认音质等级(0-16, 推荐14)
+qq_quality = "14"
 
 # 最大搜索结果数
 max_search_results = 10
@@ -42,7 +54,7 @@ max_search_results = 10
 [features]
 
 # 是否显示专辑封面
-show_cover = false
+show_cover = true
 
 # 是否显示下载链接
 show_download_link = false
@@ -52,4 +64,17 @@ show_info_text = true
 
 # 是否以语音消息发送音乐（true=语音消息，false=音乐卡片）
 send_as_voice = false
+
+# 最大封面图片大小（字节，默认5MB）
+max_image_size = 5242880
+
+# 是否启用数字快捷选择（直接输入1-10选歌）
+enable_quick_choose = true
+
+# 是否启用相似推荐功能
+enable_recommendation = true
+
+# 最大推荐歌曲数量
+max_recommendations = 5
+
 
