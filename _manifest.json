@@ -1,0 +1,101 @@
+{
+  "manifest_version": 1,
+  "name": "entertainment_plugin",
+  "display_name": "娱乐插件",
+  "version": "1.0.0",
+  "description": "整合了看看腿、新闻、音乐等娱乐功能的统一插件，提供图片、新闻资讯、音乐点歌等多种娱乐服务",
+  "author": {
+    "name": "Augment Agent",
+    "url": "https://github.com/MaiM-with-u/maibot"
+  },
+  "license": "GPL-3.0-or-later",
+  "host_application": {
+    "min_version": "0.9.0",
+    "max_version": "1.0.0"
+  },
+  "homepage": "https://github.com/MaiM-with-u/maibot",
+  "keywords": ["娱乐", "图片", "新闻", "音乐", "点歌", "看看腿", "60秒", "网易云", "QQ音乐"],
+  "categories": ["Entertainment", "Music", "Information", "Image"],
+  "tags": ["娱乐", "图片", "新闻", "音乐", "多功能"],
+  "dependencies": [],
+  "python_dependencies": ["aiohttp", "Pillow"],
+  "config_file": "config.toml",
+  "enabled": true,
+  "components": {
+    "tools": [
+      {
+        "name": "get_60s_news",
+        "description": "获取每天60秒读懂世界的最新新闻摘要"
+      },
+      {
+        "name": "get_today_in_history",
+        "description": "获取历史上的今天发生的重要事件"
+      },
+      {
+        "name": "play_music",
+        "description": "搜索并播放指定歌曲。当用户想听音乐、点歌或推荐歌曲时使用此工具"
+      }
+    ],
+    "actions": [
+      {
+        "name": "random_image_action",
+        "description": "获取随机腿部图片并发送",
+        "activation": "keyword",
+        "keywords": ["看看腿", "腿", "看腿", "康康腿", "看看大长腿", "大长腿"]
+      }
+    ],
+    "commands": [
+      {
+        "name": "random_image_command",
+        "pattern": "/kankan [类型] 或 /看腿 [类型]",
+        "description": "获取随机腿部图片，支持指定类型"
+      },
+      {
+        "name": "news",
+        "pattern": "/news 或 /新闻",
+        "description": "查询每天60秒读懂世界新闻"
+      },
+      {
+        "name": "history",
+        "pattern": "/history 或 /历史",
+        "description": "查询历史上的今天"
+      },
+      {
+        "name": "music",
+        "pattern": "/music [音源] 歌曲名",
+        "description": "点歌命令，支持网易云和QQ音乐"
+      },
+      {
+        "name": "choose",
+        "pattern": "/choose 序号",
+        "description": "从搜索结果中选择歌曲"
+      },
+      {
+        "name": "quick_choose",
+        "pattern": "直接输入数字 1-10",
+        "description": "快捷选择歌曲"
+      }
+    ]
+  },
+  "features": {
+    "image": {
+      "enabled": true,
+      "description": "随机图片功能，支持关键词和命令触发"
+    },
+    "news": {
+      "enabled": true,
+      "description": "每天60秒新闻和历史上的今天"
+    },
+    "music": {
+      "enabled": true,
+      "description": "音乐点歌功能，支持网易云和QQ音乐"
+    }
+  },
+  "configuration": {
+    "modules": {
+      "image_enabled": true,
+      "news_enabled": true,
+      "music_enabled": true
+    }
+  }
+}
