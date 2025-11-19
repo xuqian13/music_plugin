@@ -1,19 +1,18 @@
 {
   "manifest_version": 1,
-  "name": "entertainment_plugin",
-  "display_name": "娱乐插件",
+  "name": "娱乐插件",
   "version": "1.0.0",
   "description": "整合了看看腿、新闻、音乐等娱乐功能的统一插件，提供图片、新闻资讯、音乐点歌等多种娱乐服务",
   "author": {
-    "name": "Augment Agent",
-    "url": "https://github.com/MaiM-with-u/maibot"
+    "name": "靓仔",
+    "url": "https://github.com/xuqian13"
   },
-  "license": "GPL-3.0-or-later",
+  "license": "AGPL-v3.0",
   "host_application": {
-    "min_version": "0.9.0",
+    "min_version": "0.11.0",
     "max_version": "1.0.0"
   },
-  "homepage": "https://github.com/MaiM-with-u/maibot",
+  "repository_url": "https://github.com/xuqian13/music_plugin",
   "keywords": ["娱乐", "图片", "新闻", "音乐", "点歌", "看看腿", "60秒", "网易云", "QQ音乐"],
   "categories": ["Entertainment", "Music", "Information", "Image"],
   "tags": ["娱乐", "图片", "新闻", "音乐", "多功能"],
