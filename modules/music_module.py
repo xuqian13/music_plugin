@@ -282,10 +282,352 @@ class QQMusicAdapter(MusicSourceAdapter):
         }
 
 
-def get_music_adapter(source: str, api_url: str, timeout: int) -> MusicSourceAdapter:
-    """获取音乐源适配器"""
+class NeteaseVIPAdapter(MusicSourceAdapter):
+    """网易云音乐VIP适配器"""
+
+    def __init__(self, vip_api_url: str, timeout: int):
+        # 拼接完整的API路径
+        full_api_url = vip_api_url.rstrip('/') + '/netmusic'
+        super().__init__(full_api_url, timeout)
+        self.source_name = "netease_vip"
+        self.source_display_name = "网易云音乐VIP"
+
+    async def search_list(self, keyword: str, page: int = 1, num: int = 10) -> Optional[List[dict]]:
+        """搜索网易云音乐VIP列表"""
+        try:
+            # 限制返回数量在1-100之间
+            limit = min(max(num, 1), 100)
+            params = {"name": keyword, "limit": limit}
+
+            data = await self.client.get_json(
+                self.api_url,
+                params=params,
+                log_prefix="[NeteaseVIP]"
+            )
+
+            # 根据API文档,返回格式可能是列表或对象
+            if data:
+                # 如果返回是列表,直接使用
+                if isinstance(data, list):
+                    return [self.normalize_music_info(item) for item in data[:limit]]
+                # 如果返回是字典,可能包含data字段
+                elif isinstance(data, dict):
+                    result_data = data.get("data", data)
+                    if isinstance(result_data, list):
+                        return [self.normalize_music_info(item) for item in result_data[:limit]]
+                    else:
+                        return [self.normalize_music_info(result_data)]
+        except Exception as e:
+            logger.error(f"[NeteaseVIPAdapter] 搜索失败: {e}")
+        return None
+
+    async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
+        """获取网易云音乐VIP详情
+
+        Args:
+            keyword: 搜索关键词
+            choose: 选择第几首歌(从1开始)
+        """
+        try:
+            # 先搜索歌曲列表
+            music_list = await self.search_list(keyword, page=1, num=choose)
+
+            if not music_list or len(music_list) < choose:
+                logger.error(f"[NeteaseVIPAdapter] 搜索结果不足,需要第{choose}首,实际只有{len(music_list) if music_list else 0}首")
+                return None
+
+            # 从列表中获取指定序号的歌曲
+            selected_music = music_list[choose - 1]  # choose从1开始,列表从0开始
+
+            # 如果有mid,使用mid获取高音质链接
+            mid = selected_music.get("mid") or selected_music.get("id")
+            if mid:
+                # 使用mid获取VIP音质的播放链接
+                params = {"mid": mid, "level": 2}  # level=2是建议的最低音质
+
+                data = await self.client.get_json(
+                    self.api_url,
+                    params=params,
+                    log_prefix="[NeteaseVIP]"
+                )
+
+                if data:
+                    # VIP API返回格式: {"data": {...}, "retcode": 0}
+                    if isinstance(data, dict):
+                        # 提取data字段
+                        vip_data = data.get("data", data)
+                        url = vip_data.get("url") or vip_data.get("mp3")
+                        if url:
+                            selected_music["url"] = url
+                            selected_music["quality"] = "VIP音质"
+                            # 更新其他信息
+                            if vip_data.get("size"):
+                                selected_music["size"] = vip_data.get("size")
+                            if vip_data.get("level"):
+                                selected_music["quality"] = f"VIP音质({vip_data.get('level')})"
+
+            return selected_music
+
+        except Exception as e:
+            logger.error(f"[NeteaseVIPAdapter] 获取详情失败: {e}")
+        return None
+
+    def normalize_music_info(self, data: dict) -> dict:
+        """标准化网易云音乐VIP信息"""
+        return {
+            "source": self.source_name,
+            "source_name": self.source_display_name,
+            "id": data.get("id", "") or data.get("mid", ""),
+            "mid": data.get("mid", ""),
+            "song": data.get("song", "") or data.get("name", "未知歌曲"),
+            "singer": data.get("singer", "") or data.get("artist", "未知歌手"),
+            "album": data.get("album", "未知专辑"),
+            "cover": data.get("cover", "") or data.get("pic", ""),
+            "url": data.get("url", "") or data.get("mp3", ""),
+            "link": data.get("link", ""),
+            "interval": data.get("interval", "") or data.get("time", "未知时长"),
+            "size": data.get("size", "未知大小"),
+            "quality": data.get("quality", "") or data.get("level", "VIP音质"),
+        }
+
+
+class QQMusicVIPAdapter(MusicSourceAdapter):
+    """QQ音乐VIP适配器"""
+
+    def __init__(self, vip_api_url: str, timeout: int):
+        # 拼接完整的API路径
+        full_api_url = vip_api_url.rstrip('/') + '/qqmusic'
+        super().__init__(full_api_url, timeout)
+        self.source_name = "qq_vip"
+        self.source_display_name = "QQ音乐VIP"
+
+    async def search_list(self, keyword: str, page: int = 1, num: int = 10) -> Optional[List[dict]]:
+        """搜索QQ音乐VIP列表"""
+        try:
+            # 限制返回数量在1-100之间
+            limit = min(max(num, 1), 100)
+            params = {"name": keyword, "limit": limit}
+
+            data = await self.client.get_json(
+                self.api_url,
+                params=params,
+                log_prefix="[QQMusicVIP]"
+            )
+
+            # 根据API文档,返回格式可能是列表或对象
+            if data:
+                # 如果返回是列表,直接使用
+                if isinstance(data, list):
+                    return [self.normalize_music_info(item) for item in data[:limit]]
+                # 如果返回是字典,可能包含data字段
+                elif isinstance(data, dict):
+                    result_data = data.get("data", data)
+                    if isinstance(result_data, list):
+                        return [self.normalize_music_info(item) for item in result_data[:limit]]
+                    else:
+                        return [self.normalize_music_info(result_data)]
+        except Exception as e:
+            logger.error(f"[QQMusicVIPAdapter] 搜索失败: {e}")
+        return None
+
+    async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
+        """获取QQ音乐VIP详情
+
+        Args:
+            keyword: 搜索关键词
+            choose: 选择第几首歌(从1开始)
+        """
+        try:
+            # 先搜索歌曲列表
+            music_list = await self.search_list(keyword, page=1, num=choose)
+
+            if not music_list or len(music_list) < choose:
+                logger.error(f"[QQMusicVIPAdapter] 搜索结果不足,需要第{choose}首,实际只有{len(music_list) if music_list else 0}首")
+                return None
+
+            # 从列表中获取指定序号的歌曲
+            selected_music = music_list[choose - 1]  # choose从1开始,列表从0开始
+
+            # 如果有mid,使用mid获取高音质链接
+            mid = selected_music.get("mid") or selected_music.get("id")
+            if mid:
+                # 使用mid获取VIP音质的播放链接
+                params = {"mid": mid, "quality": 2}  # quality=2
+
+                data = await self.client.get_json(
+                    self.api_url,
+                    params=params,
+                    log_prefix="[QQMusicVIP]"
+                )
+
+                if data:
+                    # VIP API返回格式: {"data": {...}, "retcode": 0}
+                    if isinstance(data, dict):
+                        # 提取data字段
+                        vip_data = data.get("data", data)
+                        url = vip_data.get("url") or vip_data.get("mp3")
+                        if url:
+                            selected_music["url"] = url
+                            selected_music["quality"] = "VIP音质"
+                            # 更新其他信息
+                            if vip_data.get("size"):
+                                selected_music["size"] = vip_data.get("size")
+                            if vip_data.get("level"):
+                                selected_music["quality"] = f"VIP音质({vip_data.get('level')})"
+
+            return selected_music
+
+        except Exception as e:
+            logger.error(f"[QQMusicVIPAdapter] 获取详情失败: {e}")
+        return None
+
+    def normalize_music_info(self, data: dict) -> dict:
+        """标准化QQ音乐VIP信息"""
+        return {
+            "source": self.source_name,
+            "source_name": self.source_display_name,
+            "id": data.get("id", "") or data.get("mid", ""),
+            "mid": data.get("mid", ""),
+            "song": data.get("song", "") or data.get("name", "未知歌曲"),
+            "singer": data.get("singer", "") or data.get("artist", "未知歌手"),
+            "album": data.get("album", "未知专辑"),
+            "cover": data.get("cover", "") or data.get("pic", ""),
+            "url": data.get("url", "") or data.get("mp3", ""),
+            "link": data.get("link", ""),
+            "interval": data.get("interval", "") or data.get("time", "未知时长"),
+            "size": data.get("size", "未知大小"),
+            "quality": data.get("quality", "") or data.get("level", "VIP音质"),
+        }
+
+
+class JuheAdapter(MusicSourceAdapter):
+    """聚合点歌适配器"""
+
+    def __init__(self, api_url: str, timeout: int):
+        super().__init__(api_url, timeout)
+        self.source_name = "juhe"
+        self.source_display_name = "聚合点歌"
+
+    async def search_list(self, keyword: str, page: int = 1, num: int = 10) -> Optional[List[dict]]:
+        """搜索聚合点歌列表"""
+        try:
+            # 不使用n参数,API会返回多首歌曲列表
+            params = {"msg": keyword, "type": "json"}
+            data = await self.client.get_json(
+                self.api_url,
+                params=params,
+                log_prefix="[Juhe]"
+            )
+
+            # 聚合API返回格式: {"list": [...]}
+            if data and isinstance(data, dict):
+                result_list = data.get("list")
+
+                if isinstance(result_list, list) and len(result_list) > 0:
+                    # 限制返回数量
+                    music_list = [self.normalize_music_info(item, i) for i, item in enumerate(result_list[:num])]
+                    return music_list
+
+            # 如果data直接是列表
+            elif isinstance(data, list) and len(data) > 0:
+                music_list = [self.normalize_music_info(item, i) for i, item in enumerate(data[:num])]
+                return music_list
+
+        except Exception as e:
+            logger.error(f"[JuheAdapter] 搜索失败: {e}")
+        return None
+
+    async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
+        """获取聚合点歌详情
+
+        Args:
+            keyword: 搜索关键词
+            choose: 选择第几首歌(从1开始)
+
+        返回格式: {"data": {"code": 200, "title": "...", "url": "...", ...}}
+        """
+        try:
+            params = {"msg": keyword, "n": choose, "type": "json"}
+            response = await self.client.get_json(
+                self.api_url,
+                params=params,
+                log_prefix="[Juhe]"
+            )
+
+            if response and isinstance(response, dict):
+                # 提取data字段
+                data = response.get("data")
+
+                if data and data.get("code") == 200:
+                    # 标准化音乐信息
+                    return {
+                        "source": self.source_name,
+                        "source_name": self.source_display_name,
+                        "id": str(data.get("selected_index") or choose),
+                        "song": data.get("title") or "未知歌曲",
+                        "singer": data.get("singer") or "未知歌手",
+                        "album": "未知专辑",
+                        "cover": data.get("cover") or "",
+                        "url": data.get("url") or "",
+                        "link": data.get("link") or "",
+                        "interval": "未知时长",
+                        "size": "未知大小",
+                        "quality": "聚合音质",
+                    }
+
+        except Exception as e:
+            logger.error(f"[JuheAdapter] 获取详情失败: {e}")
+        return None
+
+    def normalize_music_info(self, data: dict, index: int = 0) -> dict:
+        """标准化聚合点歌信息
+
+        Args:
+            data: API返回的歌曲数据
+            index: 歌曲在列表中的索引(用于生成ID)
+
+        API返回字段: n, title, singer, app, songid, cover, has_accompaniment
+        """
+        # 使用API提供的songid或n作为ID
+        song_id = data.get("songid") or data.get("n") or str(index + 1)
+
+        return {
+            "source": self.source_name,
+            "source_name": self.source_display_name,
+            "id": str(song_id),
+            "song": data.get("title") or "未知歌曲",
+            "singer": data.get("singer") or "未知歌手",
+            "album": "未知专辑",
+            "cover": data.get("cover") or "",
+            "url": data.get("url") or "",  # 列表中不包含url,需要在get_music_detail中获取
+            "link": data.get("link") or "",
+            "interval": data.get("time") or "未知时长",
+            "size": "未知大小",
+            "quality": f"聚合音质({data.get('app', 'unknown')})",
+            # 保存原始数据用于后续获取详情
+            "_raw_n": data.get("n"),
+            "_raw_app": data.get("app"),
+        }
+
+
+def get_music_adapter(source: str, api_url: str, timeout: int, vip_api_url: str = None, juhe_api_url: str = None) -> MusicSourceAdapter:
+    """获取音乐源适配器
+
+    Args:
+        source: 音乐源(netease/qq/netease_vip/qq_vip/juhe)
+        api_url: 普通API地址
+        timeout: 超时时间
+        vip_api_url: VIP API地址
+        juhe_api_url: 聚合点歌API地址
+    """
     if source == "qq":
         return QQMusicAdapter(api_url, timeout)
+    elif source == "qq_vip":
+        return QQMusicVIPAdapter(vip_api_url or "https://www.littleyouzi.com/api/v2/qqmusic", timeout)
+    elif source == "netease_vip":
+        return NeteaseVIPAdapter(vip_api_url or "https://www.littleyouzi.com/api/v2/netmusic", timeout)
+    elif source == "juhe":
+        return JuheAdapter(juhe_api_url or "https://api.xcvts.cn/api/music/juhe", timeout)
     else:
         return NeteaseAdapter(api_url, timeout)
 
@@ -297,9 +639,16 @@ class MusicCommand(BaseCommand):
 
     command_name = "music"
     command_description = "点歌命令"
-    command_pattern = r"^/music\s+(?:(?P<source>netease|qq)\s+)?(?P<song_name>.+)$"
+    command_pattern = r"^/music\s+(?:(?P<source>netease|qq|netease_vip|qq_vip|juhe)\s+)?(?P<song_name>.+)$"
     command_help = "点歌命令，用法：/music [音源] 歌曲名"
-    command_examples = ["/music 勾指起誓", "/music netease 晴天", "/music qq 青花瓷"]
+    command_examples = [
+        "/music 勾指起誓",
+        "/music netease 晴天",
+        "/music qq 青花瓷",
+        "/music netease_vip 稻香",
+        "/music qq_vip 七里香",
+        "/music juhe 起风了"
+    ]
     intercept_message = True
 
     async def execute(self) -> Tuple[bool, str, bool]:
@@ -309,11 +658,21 @@ class MusicCommand(BaseCommand):
             user_source = ((self.matched_groups or {}).get("source") or "").strip()
 
             if not song_name:
-                await self.send_text("❌ 请输入正确的格式：/music [音源] 歌曲名\n可选音源：netease（网易云）、qq（QQ音乐）")
+                await self.send_text(
+                    "❌ 请输入正确的格式：/music [音源] 歌曲名\n"
+                    "可选音源：\n"
+                    "- netease（网易云）\n"
+                    "- qq（QQ音乐）\n"
+                    "- netease_vip（网易云VIP）\n"
+                    "- qq_vip（QQ音乐VIP）\n"
+                    "- juhe（聚合点歌）"
+                )
                 return False, "缺少歌曲名称", True
 
             # 获取配置
             api_url = self.get_config("music.api_url", "https://api.vkeys.cn")
+            vip_api_url = self.get_config("music.vip_api_url", "https://www.littleyouzi.com/api/v2")
+            juhe_api_url = self.get_config("music.juhe_api_url", "https://api.xcvts.cn/api/music/juhe")
             timeout = self.get_config("music.timeout", 10)
             max_results = self.get_config("music.max_search_results", 10)
             default_source = self.get_config("music.default_source", "netease")
@@ -322,7 +681,7 @@ class MusicCommand(BaseCommand):
             if user_source:
                 all_sources = [user_source]
             else:
-                all_sources = ["netease", "qq"]
+                all_sources = ["netease", "qq", "netease_vip", "qq_vip", "juhe"]
                 if default_source in all_sources:
                     all_sources.remove(default_source)
                     all_sources.insert(0, default_source)
@@ -335,7 +694,14 @@ class MusicCommand(BaseCommand):
             for source in all_sources:
                 for attempt in range(1, 4):  # 每个源尝试3次
                     try:
-                        adapter = get_music_adapter(source, api_url, timeout)
+                        # 根据源类型选择合适的API URL
+                        if source in ["netease_vip", "qq_vip"]:
+                            adapter = get_music_adapter(source, api_url, timeout, vip_api_url, juhe_api_url)
+                        elif source == "juhe":
+                            adapter = get_music_adapter(source, api_url, timeout, vip_api_url, juhe_api_url)
+                        else:
+                            adapter = get_music_adapter(source, api_url, timeout, vip_api_url, juhe_api_url)
+
                         music_list = await adapter.search_list(song_name, page=1, num=max_results)
 
                         if music_list and len(music_list) > 0:
@@ -422,11 +788,15 @@ class ChooseCommand(BaseCommand):
 
             # 获取完整音乐信息
             api_url = self.get_config("music.api_url", "https://api.vkeys.cn")
+            vip_api_url = self.get_config("music.vip_api_url", "https://www.littleyouzi.com/api/v2")
+            juhe_api_url = self.get_config("music.juhe_api_url", "https://api.xcvts.cn/api/music/juhe")
             timeout = self.get_config("music.timeout", 10)
             keyword = search_data.get("keyword", "")
             source = search_data.get("source", "netease")
 
-            adapter = get_music_adapter(source, api_url, timeout)
+            # 根据源类型选择合适的适配器
+            adapter = get_music_adapter(source, api_url, timeout, vip_api_url, juhe_api_url)
+
             music_info = await adapter.get_music_detail(keyword, index)
 
             if music_info:
@@ -559,11 +929,15 @@ class QuickChooseCommand(BaseCommand):
 
             # 获取音乐信息并播放（复用 ChooseCommand 逻辑）
             api_url = self.get_config("music.api_url", "https://api.vkeys.cn")
+            vip_api_url = self.get_config("music.vip_api_url", "https://www.littleyouzi.com/api/v2")
+            juhe_api_url = self.get_config("music.juhe_api_url", "https://api.xcvts.cn/api/music/juhe")
             timeout = self.get_config("music.timeout", 10)
             keyword = search_data.get("keyword", "")
             source = search_data.get("source", "netease")
 
-            adapter = get_music_adapter(source, api_url, timeout)
+            # 根据源类型选择合适的适配器
+            adapter = get_music_adapter(source, api_url, timeout, vip_api_url, juhe_api_url)
+
             music_info = await adapter.get_music_detail(keyword, index)
 
             if music_info:
@@ -647,7 +1021,7 @@ class PlayMusicTool(BaseTool):
     description = "搜索并播放歌曲。重要：调用此工具时必须提供具体歌名。如果用户没指定歌名（如'推首歌'），AI应该根据聊天上下文、用户情绪、喜好等自行推荐一首合适的歌曲，然后将歌名作为参数传给此工具"
     parameters = [
         ("song_name", ToolParamType.STRING, "歌曲名称或歌手+歌名，必填。AI需要填写具体歌名，不能为空", True, None),
-        ("source", ToolParamType.STRING, "音乐源，可选netease(网易云)或qq(QQ音乐)，默认netease", False, ["netease", "qq"])
+        ("source", ToolParamType.STRING, "音乐源，可选netease(网易云)、qq(QQ音乐)、netease_vip(网易云VIP)、qq_vip(QQ音乐VIP)、juhe(聚合点歌)，默认netease", False, ["netease", "qq", "netease_vip", "qq_vip", "juhe"])
     ]
     available_for_llm = True
 
@@ -669,6 +1043,8 @@ class PlayMusicTool(BaseTool):
 
             # 获取配置
             api_url = self.get_config("music.api_url", "https://api.vkeys.cn")
+            vip_api_url = self.get_config("music.vip_api_url", "https://www.littleyouzi.com/api/v2")
+            juhe_api_url = self.get_config("music.juhe_api_url", "https://api.xcvts.cn/api/music/juhe")
             timeout = self.get_config("music.timeout", 10)
             default_source = self.get_config("music.default_source", "netease")
 
@@ -676,7 +1052,7 @@ class PlayMusicTool(BaseTool):
             if user_source:
                 all_sources = [user_source]
             else:
-                all_sources = ["netease", "qq"]
+                all_sources = ["netease", "qq", "netease_vip", "qq_vip", "juhe"]
                 if default_source in all_sources:
                     all_sources.remove(default_source)
                     all_sources.insert(0, default_source)
@@ -688,7 +1064,9 @@ class PlayMusicTool(BaseTool):
             for source in all_sources:
                 for attempt in range(1, 4):  # 每个源尝试3次
                     try:
-                        adapter = get_music_adapter(source, api_url, timeout)
+                        # 根据源类型选择合适的适配器
+                        adapter = get_music_adapter(source, api_url, timeout, vip_api_url, juhe_api_url)
+
                         music_list = await adapter.search_list(song_name, page=1, num=1)
 
                         if music_list and len(music_list) > 0:

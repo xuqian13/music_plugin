@@ -11,9 +11,10 @@ version = "1.0.0"                       # 插件版本
 
 # ============ 功能模块开关 ============
 [modules]
-image_enabled = true                    # 是否启用看看腿功能
+image_enabled = false                    # 是否启用看看腿功能
 news_enabled = true                     # 是否启用新闻功能
 music_enabled = true                    # 是否启用音乐功能
+ai_draw_enabled = true                  # 是否启用AI绘图功能
 
 # ============ 看看腿功能配置 ============
 [image]
@@ -23,23 +24,32 @@ available_classes = [101, 102, 103, 104]                    # 可用的图片类
 
 # ============ 新闻功能配置 ============
 [news]
-api_url = "https://60s.viki.moe/v2/60s"                     # 60秒新闻API地址
-history_api_url = "https://60s.viki.moe/v2/today-in-history" # 历史上的今天API地址
+api_url = "https://60api.09cdn.xyz/v2/60s"                     # 60秒新闻API地址
+history_api_url = "https://60api.09cdn.xyz/v2/today-in-history" # 历史上的今天API地址
 send_image = true                                           # 是否发送新闻图片
 send_text = false                                            # 是否发送新闻文本
 max_history_events = 10                                     # 历史事件最大显示数量
 
 # ============ 音乐功能配置 ============
 [music]
-api_url = "https://api.vkeys.cn"                            # 音乐API基础URL
-default_source = "netease"                                  # 默认音乐源 (netease=网易云音乐, qq=QQ音乐)
+api_url = "https://api.vkeys.cn"                            # 音乐API基础URL(普通音源)
+vip_api_url = "https://www.littleyouzi.com/api/v2"          # VIP音乐API基础URL
+juhe_api_url = "https://api.xcvts.cn/api/music/juhe"        # 聚合点歌API地址
+default_source = "netease"                                  # 默认音乐源 (netease=网易云音乐, qq=QQ音乐, netease_vip=网易云VIP, qq_vip=QQ音乐VIP, juhe=聚合点歌)
 timeout = 30                                                # API请求超时时间(秒)
 max_search_results = 10                                     # 最大搜索结果数
 show_cover = false                                           # 是否显示专辑封面
 show_info_text = false                                       # 是否显示音乐信息文本
-send_as_voice = false                                       # 是否以语音消息发送音乐 (true=语音消息, false=音乐卡片)
+send_as_voice = true                                       # 是否以语音消息发送音乐 (true=语音消息, false=音乐卡片)
 enable_quick_choose = true                                   # 是否启用数字快捷选择 (直接输入1-10选歌)
 quick_choose_timeout = 60                                   # 快捷选择有效期(秒) 默认60秒，超时后自动禁用数字监听
+
+# ============ AI绘图功能配置 ============
+[ai_draw]
+api_url = "https://api.xingzhige.com/API/DrawOne/"         # AI绘图API地址
+default_prompt = "jk"                                       # 默认描述词(当用户未提供时使用)
+timeout = 30                                                # API请求超时时间(秒)
+selection_mode = "best"                                     # 图片选择模式: best=智能最佳匹配, random=随机选择, all=发送全部(最多4张)
 
 # =====================================================
 # 使用说明：
@@ -57,9 +67,32 @@ quick_choose_timeout = 60                                   # 快捷选择有效
 #   例如：/music 晴天
 #         /music netease 勾指起誓
 #         /music qq 青花瓷
+#         /music netease_vip 稻香 (网易云VIP音质)
+#         /music qq_vip 七里香 (QQ音乐VIP音质)
+#         /music juhe 起风了 (聚合点歌)
 # - 选择歌曲：/choose 序号
 #   例如：/choose 1
 # - 快捷选择：直接输入数字 1-10（搜索后60秒内有效）
 #   例如：输入 1
+#
+# 音源说明：
+# - netease: 网易云音乐普通音质
+# - qq: QQ音乐普通音质
+# - netease_vip: 网易云音乐VIP音质(需要VIP API)
+# - qq_vip: QQ音乐VIP音质(需要VIP API)
+# - juhe: 聚合点歌(整合多个音乐平台)
+#
+# AI绘图功能：
+# - 关键词触发：AI绘图、画图、绘图、生成图片、画一张
+#   例如：AI绘图 可爱的猫咪
+#         画一张 美丽的风景
+# - 命令触发：/draw 或 /绘图 或 /画图 <描述词>
+#   例如：/draw jk
+#         /绘图 可爱的猫咪
+#         /画图 动漫少女
+# - 选择模式说明：
+#   * best (推荐): 智能分析creation_prompt与用户描述词的匹配度,选择最相关的一张
+#   * random: 从API返回的多张图片中随机选择一张
+#   * all: 发送API返回的所有图片(最多4张)
 #
 # =====================================================

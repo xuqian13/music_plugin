@@ -27,6 +27,7 @@ from .modules.music_module import (
     ChooseCommand,
     QuickChooseCommand
 )
+from .modules.ai_draw_module import AIDrawAction, AIDrawCommand
 
 logger = get_logger("entertainment_plugin")
 
@@ -87,6 +88,11 @@ class EntertainmentPlugin(BasePlugin):
                 type=bool,
                 default=True,
                 description="是否启用音乐功能"
+            ),
+            "ai_draw_enabled": ConfigField(
+                type=bool,
+                default=True,
+                description="是否启用AI绘图功能"
             )
         },
         "image": {
@@ -137,12 +143,22 @@ class EntertainmentPlugin(BasePlugin):
             "api_url": ConfigField(
                 type=str,
                 default="https://api.vkeys.cn",
-                description="音乐API基础URL"
+                description="音乐API基础URL(普通音源)"
+            ),
+            "vip_api_url": ConfigField(
+                type=str,
+                default="https://www.littleyouzi.com/api/v2",
+                description="VIP音乐API基础URL"
+            ),
+            "juhe_api_url": ConfigField(
+                type=str,
+                default="https://api.xcvts.cn/api/music/juhe",
+                description="聚合点歌API地址"
             ),
             "default_source": ConfigField(
                 type=str,
                 default="netease",
-                description="默认音乐源(netease=网易云音乐, qq=QQ音乐)"
+                description="默认音乐源(netease=网易云音乐, qq=QQ音乐, netease_vip=网易云VIP, qq_vip=QQ音乐VIP, juhe=聚合点歌)"
             ),
             "timeout": ConfigField(
                 type=int,
@@ -174,6 +190,28 @@ class EntertainmentPlugin(BasePlugin):
                 default=True,
                 description="是否启用数字快捷选择（直接输入1-10选歌）"
             )
+        },
+        "ai_draw": {
+            "api_url": ConfigField(
+                type=str,
+                default="https://api.xingzhige.com/API/DrawOne/",
+                description="AI绘图API地址"
+            ),
+            "default_prompt": ConfigField(
+                type=str,
+                default="jk",
+                description="默认描述词(当用户未提供时使用)"
+            ),
+            "timeout": ConfigField(
+                type=int,
+                default=30,
+                description="API请求超时时间(秒)"
+            ),
+            "selection_mode": ConfigField(
+                type=str,
+                default="best",
+                description="图片选择模式(best=智能最佳匹配, random=随机选择, all=发送全部)"
+            )
         }
     }
 
@@ -186,11 +224,13 @@ class EntertainmentPlugin(BasePlugin):
             image_enabled = self.get_config("modules.image_enabled", True)
             news_enabled = self.get_config("modules.news_enabled", True)
             music_enabled = self.get_config("modules.music_enabled", True)
+            ai_draw_enabled = self.get_config("modules.ai_draw_enabled", True)
         except AttributeError:
             # 如果 get_config 方法不存在，默认启用所有模块
             image_enabled = True
             news_enabled = True
             music_enabled = True
+            ai_draw_enabled = True
 
         # 看看腿模块
         if image_enabled:
@@ -213,6 +253,12 @@ class EntertainmentPlugin(BasePlugin):
             components.append((ChooseCommand.get_command_info(), ChooseCommand))
             components.append((QuickChooseCommand.get_command_info(), QuickChooseCommand))
             logger.info("已启用音乐模块")
+
+        # AI绘图模块
+        if ai_draw_enabled:
+            components.append((AIDrawAction.get_action_info(), AIDrawAction))
+            components.append((AIDrawCommand.get_command_info(), AIDrawCommand))
+            logger.info("已启用AI绘图模块")
 
         logger.info(f"娱乐插件加载了 {len(components)} 个组件")
         return components
