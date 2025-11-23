@@ -33,12 +33,13 @@ _cache_cleanup_task: Optional[asyncio.Task] = None
 
 async def get_search_cache(key: str) -> Optional[dict]:
     """
-    获取搜索缓存（线程安全，自动过期检查）
+    获取搜索缓存（线程安全，自动过期检查，自动禁用命令）
 
     特性：
     - 使用asyncio.Lock确保并发访问安全
     - 自动检查缓存是否过期（TTL=30分钟）
     - 过期缓存自动删除
+    - 缓存清空后自动禁用快捷选择命令
 
     Args:
         key: 缓存键（通常是chat_id，如"music_search_group_123"或"music_search_user_456"）
@@ -59,17 +60,27 @@ async def get_search_cache(key: str) -> Optional[dict]:
                 # 过期，删除缓存
                 del _search_cache[key]
                 logger.debug(f"缓存已过期并删除: {key}")
+
+                # 如果所有缓存都已清空，禁用快捷选择命令
+                if len(_search_cache) == 0:
+                    from src.plugin_system.core.component_registry import component_registry
+                    from src.plugin_system.base.component_types import ComponentType
+
+                    await component_registry.disable_component("quick_choose", ComponentType.COMMAND)
+                    await component_registry.disable_component("choose", ComponentType.COMMAND)
+                    logger.info("已动态禁用快捷选择命令（无搜索缓存）")
         return None
 
 
 async def set_search_cache(key: str, keyword: str, results: List[dict], source: str = "netease"):
     """
-    设置搜索缓存（线程安全）
+    设置搜索缓存（线程安全，自动启用快捷选择命令）
 
     特性：
     - 使用asyncio.Lock确保并发写入安全
     - 自动记录时间戳用于TTL检查
     - 支持多音乐源缓存
+    - 自动动态启用QuickChooseCommand和ChooseCommand
 
     Args:
         key: 缓存键（如"music_search_group_123"）
@@ -78,6 +89,8 @@ async def set_search_cache(key: str, keyword: str, results: List[dict], source: 
         source: 音乐源（netease/qq/netease_vip/qq_vip/juhe）
     """
     async with _search_cache_lock:
+        is_first_cache = len(_search_cache) == 0
+
         _search_cache[key] = {
             "keyword": keyword,
             "results": results,
@@ -86,9 +99,18 @@ async def set_search_cache(key: str, keyword: str, results: List[dict], source: 
         }
         logger.debug(f"缓存已设置: {key}, 关键词={keyword}, 结果数={len(results)}")
 
+        # 如果是第一个缓存，动态启用快捷选择命令
+        if is_first_cache:
+            from src.plugin_system.core.component_registry import component_registry
+            from src.plugin_system.base.component_types import ComponentType
+
+            component_registry.enable_component("quick_choose", ComponentType.COMMAND)
+            component_registry.enable_component("choose", ComponentType.COMMAND)
+            logger.info("已动态启用快捷选择命令（有搜索缓存）")
+
 
 async def _cleanup_expired_cache():
-    """后台任务：定期清理过期缓存"""
+    """后台任务：定期清理过期缓存，自动禁用命令"""
     while True:
         try:
             await asyncio.sleep(300)  # 每5分钟检查一次
@@ -105,6 +127,15 @@ async def _cleanup_expired_cache():
 
                 if expired_keys:
                     logger.info(f"清理了 {len(expired_keys)} 个过期缓存")
+
+                    # 如果所有缓存都已清空，禁用快捷选择命令
+                    if len(_search_cache) == 0:
+                        from src.plugin_system.core.component_registry import component_registry
+                        from src.plugin_system.base.component_types import ComponentType
+
+                        await component_registry.disable_component("quick_choose", ComponentType.COMMAND)
+                        await component_registry.disable_component("choose", ComponentType.COMMAND)
+                        logger.info("已动态禁用快捷选择命令（无搜索缓存）")
 
         except asyncio.CancelledError:
             logger.debug("缓存清理任务被取消")
@@ -988,7 +1019,7 @@ class ChooseCommand(BaseCommand):
 
     @classmethod
     def get_command_info(cls):
-        """重写父类方法，返回CommandInfo"""
+        """重写父类方法，返回默认禁用的CommandInfo（动态注册）"""
         from src.plugin_system.base.component_types import CommandInfo, ComponentType
 
         return CommandInfo(
@@ -996,7 +1027,7 @@ class ChooseCommand(BaseCommand):
             component_type=ComponentType.COMMAND,
             description=cls.command_description,
             command_pattern=cls.command_pattern,
-            enabled=True  # 默认启用，execute()中会检查缓存
+            enabled=False  # 默认禁用，在有搜索缓存时动态启用
         )
 
 
@@ -1091,7 +1122,7 @@ class QuickChooseCommand(BaseCommand):
 
     @classmethod
     def get_command_info(cls):
-        """重写父类方法，返回CommandInfo"""
+        """重写父类方法，返回默认禁用的CommandInfo（动态注册）"""
         from src.plugin_system.base.component_types import CommandInfo, ComponentType
 
         return CommandInfo(
@@ -1099,7 +1130,7 @@ class QuickChooseCommand(BaseCommand):
             component_type=ComponentType.COMMAND,
             description=cls.command_description,
             command_pattern=cls.command_pattern,
-            enabled=True  # 默认启用，execute()中会检查配置和缓存
+            enabled=False  # 默认禁用，在有搜索缓存时动态启用
         )
 
 # ===== Tool 组件 =====
