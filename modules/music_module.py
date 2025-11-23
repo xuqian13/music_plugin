@@ -886,12 +886,16 @@ class MusicCommand(BaseCommand):
 
             # 保存搜索结果到缓存
             # 群聊：整个群共享搜索结果；私聊：每个用户独立缓存
-            user_id = self.message.message_info.user_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'user_id') else "unknown"
-            group_id = self.message.message_info.group_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'group_id') else None
-            search_key = f"music_search_group_{group_id}" if group_id else f"music_search_user_{user_id}"
+            is_private = self.message.is_private_message()
+            if is_private:
+                user_id = self.message.message_info.user_id
+                search_key = f"music_search_user_{user_id}"
+            else:
+                group_id = self.message.message_info.group_info.group_id
+                search_key = f"music_search_group_{group_id}"
 
             await set_search_cache(search_key, song_name, music_list, source=successful_source)
-            logger.info(f"已保存 {len(music_list)} 个搜索结果到缓存: {search_key}")
+            logger.info(f"已保存 {len(music_list)} 个搜索结果到缓存 ({'私聊' if is_private else '群聊'}): {search_key}")
 
             # 发送列表（图片或文本）
             source_display_name = adapter.source_display_name if adapter else ""
@@ -932,9 +936,13 @@ class ChooseCommand(BaseCommand):
             index = int(index_str)
 
             # 获取缓存（群聊共享，私聊独立）
-            user_id = self.message.message_info.user_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'user_id') else "unknown"
-            group_id = self.message.message_info.group_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'group_id') else None
-            search_key = f"music_search_group_{group_id}" if group_id else f"music_search_user_{user_id}"
+            is_private = self.message.is_private_message()
+            if is_private:
+                user_id = self.message.message_info.user_id
+                search_key = f"music_search_user_{user_id}"
+            else:
+                group_id = self.message.message_info.group_info.group_id
+                search_key = f"music_search_group_{group_id}"
 
             search_data = await get_search_cache(search_key)
             if not search_data:
@@ -1014,9 +1022,13 @@ class QuickChooseCommand(BaseCommand):
                 return False, "", False
 
             # 2. 获取缓存 key（群聊共享，私聊独立）
-            user_id = self.message.message_info.user_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'user_id') else "unknown"
-            group_id = self.message.message_info.group_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'group_id') else None
-            search_key = f"music_search_group_{group_id}" if group_id else f"music_search_user_{user_id}"
+            is_private = self.message.is_private_message()
+            if is_private:
+                user_id = self.message.message_info.user_id
+                search_key = f"music_search_user_{user_id}"
+            else:
+                group_id = self.message.message_info.group_info.group_id
+                search_key = f"music_search_group_{group_id}"
 
             # 3. 检查是否有搜索缓存（最重要：没有搜索就不监听数字）
             search_data = await get_search_cache(search_key)
