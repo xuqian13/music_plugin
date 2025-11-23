@@ -917,7 +917,7 @@ class MusicCommand(BaseCommand):
 
             # 保存搜索结果到缓存
             # 群聊：整个群共享搜索结果；私聊：每个用户独立缓存
-            is_private = self.message.is_private_message()
+            is_private = self.message.message_info.group_info is None or self.message.message_info.group_info.group_id is None
             if is_private:
                 user_id = self.message.message_info.user_id
                 search_key = f"music_search_user_{user_id}"
@@ -967,7 +967,7 @@ class ChooseCommand(BaseCommand):
             index = int(index_str)
 
             # 获取缓存（群聊共享，私聊独立）
-            is_private = self.message.is_private_message()
+            is_private = self.message.message_info.group_info is None or self.message.message_info.group_info.group_id is None
             if is_private:
                 user_id = self.message.message_info.user_id
                 search_key = f"music_search_user_{user_id}"
@@ -1053,7 +1053,7 @@ class QuickChooseCommand(BaseCommand):
                 return False, "", False
 
             # 2. 获取缓存 key（群聊共享，私聊独立）
-            is_private = self.message.is_private_message()
+            is_private = self.message.message_info.group_info is None or self.message.message_info.group_info.group_id is None
             if is_private:
                 user_id = self.message.message_info.user_id
                 search_key = f"music_search_user_{user_id}"
