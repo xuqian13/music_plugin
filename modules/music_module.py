@@ -373,7 +373,7 @@ class NeteaseAdapter(MusicSourceAdapter):
                 elif isinstance(result_data, dict):
                     return [self.normalize_music_info(result_data)]
         except Exception as e:
-            logger.error(f"[NeteaseAdapter] 搜索失败: {e}")
+            logger.error(f"[NeteaseAdapter] 搜索失败: {e}", exc_info=True)
         return None
 
     async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
@@ -385,24 +385,12 @@ class NeteaseAdapter(MusicSourceAdapter):
                 params=params,
                 log_prefix="[Netease]"
             )
-            logger.debug(f"[NeteaseAdapter] get_music_detail返回数据: {data}")
-
             if data and data.get("code") == 200:
                 result_data = data.get("data", {})
-                logger.debug(f"[NeteaseAdapter] result_data类型: {type(result_data)}, 内容: {result_data}")
-
                 if isinstance(result_data, list) and len(result_data) > 0:
                     result_data = result_data[0]
-                    logger.debug(f"[NeteaseAdapter] 从列表取第一个: {result_data}")
-
                 if result_data and isinstance(result_data, dict):
-                    normalized = self.normalize_music_info(result_data)
-                    logger.debug(f"[NeteaseAdapter] 标准化后的数据: {normalized}")
-                    return normalized
-                else:
-                    logger.warning(f"[NeteaseAdapter] result_data无效: type={type(result_data)}, value={result_data}")
-            else:
-                logger.warning(f"[NeteaseAdapter] API返回错误: code={data.get('code') if data else None}, data={data}")
+                    return self.normalize_music_info(result_data)
         except Exception as e:
             logger.error(f"[NeteaseAdapter] 获取详情失败: {e}", exc_info=True)
         return None
@@ -449,7 +437,7 @@ class QQMusicAdapter(MusicSourceAdapter):
                 elif isinstance(result_data, dict):
                     return [self.normalize_music_info(result_data)]
         except Exception as e:
-            logger.error(f"[QQMusicAdapter] 搜索失败: {e}")
+            logger.error(f"[QQMusicAdapter] 搜索失败: {e}", exc_info=True)
         return None
 
     async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
@@ -468,7 +456,7 @@ class QQMusicAdapter(MusicSourceAdapter):
                 if result_data and isinstance(result_data, dict):
                     return self.normalize_music_info(result_data)
         except Exception as e:
-            logger.error(f"[QQMusicAdapter] 获取详情失败: {e}")
+            logger.error(f"[QQMusicAdapter] 获取详情失败: {e}", exc_info=True)
         return None
 
     def normalize_music_info(self, data: dict) -> dict:
@@ -525,7 +513,7 @@ class NeteaseVIPAdapter(MusicSourceAdapter):
                     else:
                         return [self.normalize_music_info(result_data)]
         except Exception as e:
-            logger.error(f"[NeteaseVIPAdapter] 搜索失败: {e}")
+            logger.error(f"[NeteaseVIPAdapter] 搜索失败: {e}", exc_info=True)
         return None
 
     async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
@@ -540,7 +528,7 @@ class NeteaseVIPAdapter(MusicSourceAdapter):
             music_list = await self.search_list(keyword, page=1, num=choose)
 
             if not music_list or len(music_list) < choose:
-                logger.error(f"[NeteaseVIPAdapter] 搜索结果不足,需要第{choose}首,实际只有{len(music_list) if music_list else 0}首")
+                logger.warning(f"[NeteaseVIPAdapter] 搜索结果不足,需要第{choose}首,实际只有{len(music_list) if music_list else 0}首")
                 return None
 
             # 从列表中获取指定序号的歌曲
@@ -576,7 +564,7 @@ class NeteaseVIPAdapter(MusicSourceAdapter):
             return selected_music
 
         except Exception as e:
-            logger.error(f"[NeteaseVIPAdapter] 获取详情失败: {e}")
+            logger.error(f"[NeteaseVIPAdapter] 获取详情失败: {e}", exc_info=True)
         return None
 
     def normalize_music_info(self, data: dict) -> dict:
@@ -634,7 +622,7 @@ class QQMusicVIPAdapter(MusicSourceAdapter):
                     else:
                         return [self.normalize_music_info(result_data)]
         except Exception as e:
-            logger.error(f"[QQMusicVIPAdapter] 搜索失败: {e}")
+            logger.error(f"[QQMusicVIPAdapter] 搜索失败: {e}", exc_info=True)
         return None
 
     async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
@@ -649,7 +637,7 @@ class QQMusicVIPAdapter(MusicSourceAdapter):
             music_list = await self.search_list(keyword, page=1, num=choose)
 
             if not music_list or len(music_list) < choose:
-                logger.error(f"[QQMusicVIPAdapter] 搜索结果不足,需要第{choose}首,实际只有{len(music_list) if music_list else 0}首")
+                logger.warning(f"[QQMusicVIPAdapter] 搜索结果不足,需要第{choose}首,实际只有{len(music_list) if music_list else 0}首")
                 return None
 
             # 从列表中获取指定序号的歌曲
@@ -685,7 +673,7 @@ class QQMusicVIPAdapter(MusicSourceAdapter):
             return selected_music
 
         except Exception as e:
-            logger.error(f"[QQMusicVIPAdapter] 获取详情失败: {e}")
+            logger.error(f"[QQMusicVIPAdapter] 获取详情失败: {e}", exc_info=True)
         return None
 
     def normalize_music_info(self, data: dict) -> dict:
@@ -741,7 +729,7 @@ class JuheAdapter(MusicSourceAdapter):
                 return music_list
 
         except Exception as e:
-            logger.error(f"[JuheAdapter] 搜索失败: {e}")
+            logger.error(f"[JuheAdapter] 搜索失败: {e}", exc_info=True)
         return None
 
     async def get_music_detail(self, keyword: str, choose: int) -> Optional[dict]:
@@ -783,7 +771,7 @@ class JuheAdapter(MusicSourceAdapter):
                     }
 
         except Exception as e:
-            logger.error(f"[JuheAdapter] 获取详情失败: {e}")
+            logger.error(f"[JuheAdapter] 获取详情失败: {e}", exc_info=True)
         return None
 
     def normalize_music_info(self, data: dict, index: int = 0) -> dict:
@@ -916,7 +904,7 @@ class MusicCommand(BaseCommand):
                             logger.info(f"在 {source} 找到 {len(music_list)} 首歌曲")
                             break
                     except Exception as e:
-                        logger.error(f"音乐源 {source} 第 {attempt} 次尝试出错: {e}")
+                        logger.error(f"音乐源 {source} 第 {attempt} 次尝试出错: {e}", exc_info=True)
                         if attempt < 3:
                             await asyncio.sleep(0.5)
 
@@ -1210,7 +1198,7 @@ class PlayMusicTool(BaseTool):
                                 logger.info(f"[PlayMusicTool] 在 {source} 找到歌曲: {music_info.get('song')}")
                                 break
                     except Exception as e:
-                        logger.error(f"[PlayMusicTool] 音乐源 {source} 第 {attempt} 次尝试出错: {e}")
+                        logger.error(f"[PlayMusicTool] 音乐源 {source} 第 {attempt} 次尝试出错: {e}", exc_info=True)
                         if attempt < 3:
                             await asyncio.sleep(0.5)
 
