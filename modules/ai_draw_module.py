@@ -333,7 +333,13 @@ class AIDrawCommand(BaseCommand):
                     logger.info(f"API返回 {len(images)} 张图片")
 
                     # 根据配置选择图片
-                    selected_images, _ = select_best_image(prompt, images, selection_mode)
+                    selected_images, selected_idx = select_best_image(prompt, images, selection_mode)
+
+                    # 缓存所有图片（用于"下一张"功能）
+                    chat_id = self.message.chat_stream.stream_id if self.message and self.message.chat_stream else None
+                    if chat_id:
+                        await cache_images(chat_id, images, prompt, selected_idx)
+                        logger.debug(f"已缓存 {len(images)} 张图片，可用于换风格")
 
                     # 发送图片
                     for idx, img_data in enumerate(selected_images):
