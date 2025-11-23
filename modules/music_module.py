@@ -980,7 +980,7 @@ class ChooseCommand(BaseCommand):
 
     @classmethod
     def get_command_info(cls):
-        """重写父类方法，返回默认禁用的 CommandInfo"""
+        """重写父类方法，返回CommandInfo"""
         from src.plugin_system.base.component_types import CommandInfo, ComponentType
 
         return CommandInfo(
@@ -988,7 +988,7 @@ class ChooseCommand(BaseCommand):
             component_type=ComponentType.COMMAND,
             description=cls.command_description,
             command_pattern=cls.command_pattern,
-            enabled=False  # 默认禁用，在有搜索缓存时动态启用
+            enabled=True  # 默认启用，execute()中会检查缓存
         )
 
 
@@ -1079,7 +1079,7 @@ class QuickChooseCommand(BaseCommand):
 
     @classmethod
     def get_command_info(cls):
-        """重写父类方法，返回默认禁用的 CommandInfo"""
+        """重写父类方法，返回CommandInfo"""
         from src.plugin_system.base.component_types import CommandInfo, ComponentType
 
         return CommandInfo(
@@ -1087,7 +1087,7 @@ class QuickChooseCommand(BaseCommand):
             component_type=ComponentType.COMMAND,
             description=cls.command_description,
             command_pattern=cls.command_pattern,
-            enabled=False  # 默认禁用，在有搜索缓存时动态启用
+            enabled=True  # 默认启用，execute()中会检查配置和缓存
         )
 
 # ===== Tool 组件 =====
