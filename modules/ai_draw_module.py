@@ -2,37 +2,80 @@
 AI绘图模块 - AI Draw功能
 
 调用星知阁AI绘图API根据用户描述词生成图片
+
+功能：
+- 智能风格匹配算法
+- 图片缓存和换风格
+- 支持命令触发
 """
 
 import urllib.parse
 import aiohttp
+import asyncio
 import random
 import time
 from typing import Tuple, List, Dict, Optional
 from src.common.logger import get_logger
-from src.plugin_system.base.base_action import BaseAction, ActionActivationType
 from src.plugin_system.base.base_command import BaseCommand
-from src.plugin_system.base.component_types import ChatMode
-from src.config.config import global_config
 
 logger = get_logger("entertainment_plugin.ai_draw")
 
 # 图片缓存：{chat_id: {"images": [...], "sent_indices": set(), "prompt": str, "timestamp": float}}
 _image_cache: Dict[str, Dict] = {}
-# 缓存过期时间（秒）
-CACHE_EXPIRE_TIME = 300  # 5分钟
+_image_cache_lock = asyncio.Lock()  # 缓存并发保护
+CACHE_EXPIRE_TIME = 300  # 缓存过期时间（秒）- 5分钟
+_cache_cleanup_task: Optional[asyncio.Task] = None
+
+
+async def _cleanup_expired_image_cache():
+    """后台任务：定期清理过期的图片缓存"""
+    while True:
+        try:
+            await asyncio.sleep(300)  # 每5分钟检查一次
+
+            async with _image_cache_lock:
+                current_time = time.time()
+                expired_keys = [
+                    key for key, data in _image_cache.items()
+                    if current_time - data.get("timestamp", 0) >= CACHE_EXPIRE_TIME
+                ]
+
+                for key in expired_keys:
+                    del _image_cache[key]
+
+                if expired_keys:
+                    logger.info(f"清理了 {len(expired_keys)} 个过期图片缓存")
+
+        except asyncio.CancelledError:
+            logger.debug("图片缓存清理任务被取消")
+            break
+        except Exception as e:
+            logger.error(f"图片缓存清理任务出错: {e}", exc_info=True)
+
+
+def start_image_cache_cleanup():
+    """启动图片缓存清理任务"""
+    global _cache_cleanup_task
+    if _cache_cleanup_task is None or _cache_cleanup_task.done():
+        _cache_cleanup_task = asyncio.create_task(_cleanup_expired_image_cache())
+        logger.info("图片缓存清理任务已启动")
 
 
 def calculate_prompt_similarity(user_prompt: str, creation_prompt: str) -> float:
     """
-    计算用户描述词和生成提示词的相似度
+    计算用户描述词和生成提示词的相似度（智能匹配算法）
+
+    算法说明：
+    - 使用加权词匹配：风格关键词（如"二次元"、"日系"）权重更高
+    - 综合三种匹配方式：子串匹配(60%) + 风格加分(30%) + 字符匹配(10%)
+    - 自动降低不符合人设的风格（如"手绘"、"素描"）权重
 
     Args:
-        user_prompt: 用户输入的描述词
-        creation_prompt: API返回的创作提示词
+        user_prompt: 用户输入的描述词（如"猫娘 可爱 二次元"）
+        creation_prompt: API返回的创作提示词（如"日系二次元插画风格 猫娘少女"）
 
     Returns:
-        相似度分数 (0-1之间)
+        相似度分数 (0.0-1.0之间，越高越匹配)
     """
     if not user_prompt or not creation_prompt:
         return 0.0
@@ -41,19 +84,43 @@ def calculate_prompt_similarity(user_prompt: str, creation_prompt: str) -> float
     user_lower = user_prompt.lower()
     creation_lower = creation_prompt.lower()
 
-    # 方法1: 子串匹配 (适合中文和英文)
-    # 检查用户输入的词是否在创作提示中出现
+    # 定义风格关键词及其权重（这些词更重要）
+    style_keywords = {
+        '二次元': 2.0, '日系': 2.0, '插画': 1.8, '动漫': 1.8,
+        'anime': 2.0, '唯美': 1.5, '精致': 1.5, '细腻': 1.5,
+        '可爱': 1.3, '萌': 1.3, '猫娘': 1.5, '少女': 1.3,
+        # 降低某些不太符合人设的风格权重
+        '手绘': 0.5, '绘本': 0.5, '水彩': 0.5, '素描': 0.5
+    }
+
+    # 方法1: 加权子串匹配
     substring_score = 0.0
     user_words = user_lower.split()
+    total_weight = 0.0
 
     for word in user_words:
+        # 获取该词的权重（默认为1.0）
+        weight = style_keywords.get(word, 1.0)
+        total_weight += weight
+
         if word in creation_lower:
-            substring_score += 1.0
+            substring_score += weight
 
-    if user_words:
-        substring_score = substring_score / len(user_words)
+    if total_weight > 0:
+        substring_score = substring_score / total_weight
 
-    # 方法2: 字符级匹配 (适合中文单字匹配)
+    # 方法2: 检查creation_prompt中的风格关键词
+    style_bonus = 0.0
+    for style_word, weight in style_keywords.items():
+        if style_word in creation_lower:
+            # 如果用户描述词中也有这个词，给予额外加分
+            if style_word in user_lower:
+                style_bonus += 0.1 * weight
+            # 如果是负权重的词（如"手绘"），扣分
+            elif weight < 1.0:
+                style_bonus -= 0.1 * (1.0 - weight)
+
+    # 方法3: 字符级匹配 (适合中文单字匹配)
     char_score = 0.0
     user_chars = set(user_lower)
     creation_chars = set(creation_lower)
@@ -62,23 +129,36 @@ def calculate_prompt_similarity(user_prompt: str, creation_prompt: str) -> float
         common_chars = user_chars & creation_chars
         char_score = len(common_chars) / len(user_chars)
 
-    # 综合得分 (子串匹配权重更高)
-    final_score = substring_score * 0.7 + char_score * 0.3
+    # 综合得分 (子串匹配权重最高，风格加分次之，字符匹配最低)
+    final_score = substring_score * 0.6 + style_bonus * 0.3 + char_score * 0.1
+
+    # 确保分数在0-1范围内
+    final_score = max(0.0, min(1.0, final_score))
 
     return final_score
 
 
 def select_best_image(user_prompt: str, images: List[Dict], mode: str = "best") -> Tuple[List[Dict], int]:
     """
-    从多张图片中选择最佳图片
+    从多张图片中选择最佳图片（支持三种模式）
+
+    工作原理：
+    - best模式：使用智能算法计算每张图的相似度，选择最匹配的
+    - random模式：随机选择一张图片
+    - all模式：返回所有图片
 
     Args:
-        user_prompt: 用户输入的描述词
-        images: API返回的图片列表
-        mode: 选择模式 ("best"=最佳匹配, "random"=随机, "all"=全部)
+        user_prompt: 用户输入的描述词（如"猫娘 可爱"）
+        images: API返回的图片列表，每张图包含url和creation_prompt
+        mode: 选择模式
+            - "best" = 最佳匹配（默认，优先匹配日系二次元风格）
+            - "random" = 随机选择
+            - "all" = 返回全部图片
 
     Returns:
         (选择的图片列表, 选择的索引)
+        - 图片列表：包含选中的图片数据
+        - 索引：选中图片在原列表中的位置（用于缓存管理）
     """
     if not images:
         return [], -1
@@ -108,227 +188,82 @@ def select_best_image(user_prompt: str, images: List[Dict], mode: str = "best") 
         return [images[0]], 0
 
 
-def get_cached_images(chat_id: str) -> Optional[Dict]:
-    """获取缓存的图片，如果过期则返回None"""
-    if chat_id not in _image_cache:
+async def get_cached_images(chat_id: str) -> Optional[Dict]:
+    """
+    获取缓存的图片（线程安全），如果过期则返回None
+
+    Args:
+        chat_id: 聊天ID
+
+    Returns:
+        缓存数据或None
+    """
+    async with _image_cache_lock:
+        if chat_id not in _image_cache:
+            return None
+
+        cache = _image_cache[chat_id]
+        # 检查是否过期
+        if time.time() - cache.get("timestamp", 0) > CACHE_EXPIRE_TIME:
+            del _image_cache[chat_id]
+            logger.debug(f"图片缓存已过期并删除: {chat_id}")
+            return None
+
+        return cache
+
+
+async def cache_images(chat_id: str, images: List[Dict], prompt: str, sent_index: int):
+    """
+    缓存图片列表（线程安全）
+
+    Args:
+        chat_id: 聊天ID
+        images: 图片列表
+        prompt: 描述词
+        sent_index: 已发送的图片索引
+    """
+    async with _image_cache_lock:
+        _image_cache[chat_id] = {
+            "images": images,
+            "sent_indices": {sent_index} if sent_index >= 0 else set(),
+            "prompt": prompt,
+            "timestamp": time.time()
+        }
+        logger.debug(f"图片缓存已设置: {chat_id}, 描述词={prompt}, 图片数={len(images)}")
+
+
+async def get_next_unsent_image(chat_id: str) -> Optional[Tuple[Dict, int]]:
+    """
+    从缓存中获取下一张未发送的图片（线程安全）
+
+    Args:
+        chat_id: 聊天ID
+
+    Returns:
+        (图片数据, 索引) 或 None
+    """
+    async with _image_cache_lock:
+        if chat_id not in _image_cache:
+            return None
+
+        cache = _image_cache[chat_id]
+        # 检查是否过期
+        if time.time() - cache.get("timestamp", 0) > CACHE_EXPIRE_TIME:
+            del _image_cache[chat_id]
+            logger.debug(f"图片缓存已过期: {chat_id}")
+            return None
+
+        images = cache["images"]
+        sent_indices = cache["sent_indices"]
+
+        # 找到未发送的图片
+        for idx, img in enumerate(images):
+            if idx not in sent_indices:
+                sent_indices.add(idx)
+                return img, idx
+
+        # 所有图片都已发送
         return None
-
-    cache = _image_cache[chat_id]
-    # 检查是否过期
-    if time.time() - cache.get("timestamp", 0) > CACHE_EXPIRE_TIME:
-        del _image_cache[chat_id]
-        return None
-
-    return cache
-
-
-def cache_images(chat_id: str, images: List[Dict], prompt: str, sent_index: int):
-    """缓存图片列表"""
-    _image_cache[chat_id] = {
-        "images": images,
-        "sent_indices": {sent_index} if sent_index >= 0 else set(),
-        "prompt": prompt,
-        "timestamp": time.time()
-    }
-
-
-def get_next_unsent_image(chat_id: str) -> Optional[Tuple[Dict, int]]:
-    """从缓存中获取下一张未发送的图片"""
-    cache = get_cached_images(chat_id)
-    if not cache:
-        return None
-
-    images = cache["images"]
-    sent_indices = cache["sent_indices"]
-
-    # 找到未发送的图片
-    for idx, img in enumerate(images):
-        if idx not in sent_indices:
-            sent_indices.add(idx)
-            return img, idx
-
-    # 所有图片都已发送
-    return None
-
-
-class AIDrawAction(BaseAction):
-    """AI绘图 Action 组件 - 智能绘图生成"""
-
-    action_name = "ai_draw_action"
-    action_description = "根据描述词生成AI图片"
-
-    # 激活设置
-    activation_type = ActionActivationType.KEYWORD
-    mode_enable = ChatMode.ALL
-    parallel_action = False
-
-    # 关键词激活
-    activation_keywords = ["AI绘图", "ai绘图", "画图", "绘图", "生成图片", "画一张", "画个", "画一个", "画张", "自拍", "来个", "来张", "换个风格", "换一张", "再来一张", "下一张"]
-    keyword_case_sensitive = False
-
-    # Action 参数
-    action_parameters = {
-        "prompt": "图片描述词,用于生成AI图片"
-    }
-    action_require = [
-        "当用户要求AI绘图时使用",
-        "当用户说'AI绘图'、'画图'、'画一张'等时使用",
-        "当用户说'换个风格'、'换一张'、'再来一张'时使用",
-        "当需要根据描述生成图片时使用"
-    ]
-    associated_types = []  # 移除类型限制，允许在所有适配器中使用
-
-    # 换风格关键词
-    CHANGE_STYLE_KEYWORDS = ["换个风格", "换一张", "再来一张", "下一张", "换风格", "另一张", "其他风格"]
-
-    async def execute(self) -> Tuple[bool, str]:
-        """执行AI绘图"""
-        try:
-            # 从配置获取设置
-            api_url = self.get_config(
-                "ai_draw.api_url",
-                "https://api.xingzhige.com/API/DrawOne/"
-            )
-            default_prompt = self.get_config(
-                "ai_draw.default_prompt",
-                "jk"
-            )
-            timeout = self.get_config("ai_draw.timeout", 30)
-            selection_mode = self.get_config("ai_draw.selection_mode", "best")
-
-            # 从bot_config获取人设信息
-            bot_nickname = global_config.bot.nickname  # 小雪
-            bot_aliases = global_config.bot.alias_names  # ["雪主子", ...]
-            bot_personality = global_config.personality.personality  # 是神秘靓仔养的猫娘...
-
-            # 人设描述词 - 优先使用配置，否则从人设提取关键词
-            self_prompt = self.get_config("ai_draw.self_prompt", "")
-            if not self_prompt:
-                # 从人设自动生成描述词（不含名字，只要特征）
-                self_prompt = "二次元少女 可爱 萌"
-                # 如果人设包含"猫娘"等关键词，添加到描述词
-                if "猫娘" in bot_personality or "猫" in bot_personality:
-                    self_prompt = f"猫娘 猫耳 白发 {self_prompt}"
-                logger.debug(f"从人设生成描述词: {self_prompt}")
-
-            # 触发人设描述词的关键词 - 从bot_config获取
-            self_keywords = ["你自己", "自己", "你", bot_nickname] + list(bot_aliases)
-
-            # 尝试从消息中提取描述词
-            message_text = (self.action_message.processed_plain_text or "").strip()
-
-            # 检查是否是换风格请求
-            is_change_style = False
-            for kw in self.CHANGE_STYLE_KEYWORDS:
-                if kw in message_text:
-                    is_change_style = True
-                    logger.info(f"{self.log_prefix} 检测到换风格关键词'{kw}'")
-                    break
-
-            # 如果是换风格，尝试从缓存获取下一张图片
-            if is_change_style:
-                next_image = get_next_unsent_image(self.chat_id)
-                if next_image:
-                    img_data, idx = next_image
-                    img_url = img_data.get("url")
-                    if img_url:
-                        await self.send_custom("imageurl", img_url)
-                        creation_prompt = img_data.get("creation_prompt", "")
-                        cache = get_cached_images(self.chat_id)
-                        total = len(cache["images"]) if cache else 0
-                        sent_count = len(cache["sent_indices"]) if cache else 0
-                        logger.info(
-                            f"{self.log_prefix} 换风格：发送缓存图片 [{sent_count}/{total}] "
-                            f"创作提示: {creation_prompt[:50]}..."
-                        )
-                        return True, f"换风格成功，发送第{sent_count}张图片"
-                else:
-                    # 缓存中没有更多图片，提示用户
-                    cache = get_cached_images(self.chat_id)
-                    if cache:
-                        logger.info(f"{self.log_prefix} 缓存图片已全部发送，重新生成")
-                        await self.send_text("之前的图都发完啦，重新画一批~")
-                    # 继续执行新的API调用
-
-            # 移除触发关键词,提取描述词
-            prompt = default_prompt
-            for keyword in self.activation_keywords:
-                if keyword in message_text:
-                    # 提取关键词后的内容作为描述词
-                    parts = message_text.split(keyword, 1)
-                    if len(parts) > 1 and parts[1].strip():
-                        prompt = parts[1].strip()
-                    break
-
-            # 检查是否触发人设描述词 - 在原始消息中检测，而不仅是提取的prompt
-            use_self_prompt = False
-            for self_kw in self_keywords:
-                if self_kw in message_text:  # 改为检测原始消息
-                    logger.info(f"{self.log_prefix} 检测到人设关键词'{self_kw}'，使用人设描述词")
-                    prompt = self_prompt
-                    use_self_prompt = True
-                    break
-
-            # 如果是"自拍"类请求且没有明确的其他描述词，也使用人设描述词
-            if not use_self_prompt and "自拍" in message_text:
-                logger.info(f"{self.log_prefix} 检测到'自拍'请求，使用人设描述词")
-                prompt = self_prompt
-
-            logger.info(
-                f"{self.log_prefix} 开始AI绘图,描述词: {prompt}, 选择模式: {selection_mode}"
-            )
-
-            # URL编码描述词
-            encoded_prompt = urllib.parse.quote(prompt)
-            full_api_url = f"{api_url}?prompt={encoded_prompt}"
-
-            # 调用API获取图片数据
-            async with aiohttp.ClientSession() as session:
-                async with session.get(full_api_url, timeout=timeout) as response:
-                    if response.status != 200:
-                        raise Exception(f"API请求失败,状态码: {response.status}")
-
-                    data = await response.json()
-
-                    if data.get("code") != 200:
-                        raise Exception(f"API返回错误: {data.get('msg', '未知错误')}")
-
-                    images = data.get("data", [])
-                    if not images:
-                        raise Exception("API返回的图片列表为空")
-
-                    logger.info(f"API返回 {len(images)} 张图片")
-
-                    # 根据配置选择图片
-                    selected_images, selected_idx = select_best_image(prompt, images, selection_mode)
-
-                    # 缓存所有图片（用于换风格功能）
-                    cache_images(self.chat_id, images, prompt, selected_idx)
-
-                    # 发送图片
-                    for idx, img_data in enumerate(selected_images):
-                        img_url = img_data.get("url")
-                        if img_url:
-                            await self.send_custom("imageurl", img_url)
-                            creation_prompt = img_data.get("creation_prompt", "")
-                            logger.info(
-                                f"{self.log_prefix} 发送AI绘图 [{idx+1}/{len(selected_images)}] "
-                                f"创作提示: {creation_prompt[:50]}..."
-                            )
-
-                    remaining = len(images) - 1 if selection_mode == "best" else 0
-                    if remaining > 0:
-                        logger.info(f"{self.log_prefix} 还有{remaining}张其他风格可用，说'换个风格'可查看")
-
-                    logger.info(
-                        f"{self.log_prefix} AI绘图成功发送 {len(selected_images)} 张图片 (描述词: {prompt})"
-                    )
-                    return True, f"成功生成并发送 {len(selected_images)} 张AI图片 (描述词: {prompt})"
-
-        except Exception as e:
-            logger.error(f"{self.log_prefix} AI绘图出错: {e}")
-            await self.send_text(f"❌ AI绘图出错: {e}")
-            return False, f"AI绘图出错: {e}"
 
 
 class AIDrawCommand(BaseCommand):

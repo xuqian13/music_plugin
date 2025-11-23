@@ -27,7 +27,8 @@ from .modules.music_module import (
     ChooseCommand,
     QuickChooseCommand
 )
-from .modules.ai_draw_module import AIDrawAction, AIDrawCommand
+from .modules.ai_draw_module import AIDrawCommand
+from .modules.auto_image_tool import AIDrawTool  # 统一的AI绘图工具
 
 logger = get_logger("entertainment_plugin")
 
@@ -219,6 +220,16 @@ class EntertainmentPlugin(BasePlugin):
         """返回插件组件列表"""
         components = []
 
+        # 启动缓存清理任务（防止内存泄漏）
+        try:
+            from .modules.music_module import start_cache_cleanup
+            from .modules.ai_draw_module import start_image_cache_cleanup
+            start_cache_cleanup()
+            start_image_cache_cleanup()
+            logger.info("缓存清理任务已启动")
+        except Exception as e:
+            logger.warning(f"启动缓存清理任务失败: {e}")
+
         # 根据配置启用相应模块
         try:
             image_enabled = self.get_config("modules.image_enabled", True)
@@ -256,9 +267,10 @@ class EntertainmentPlugin(BasePlugin):
 
         # AI绘图模块
         if ai_draw_enabled:
-            components.append((AIDrawAction.get_action_info(), AIDrawAction))
             components.append((AIDrawCommand.get_command_info(), AIDrawCommand))
-            logger.info("已启用AI绘图模块")
+            # 统一的AI绘图工具（支持主动画图、自动配图、换风格）
+            components.append((AIDrawTool.get_tool_info(), AIDrawTool))
+            logger.info("已启用AI绘图模块（统一Tool + Command架构）")
 
         logger.info(f"娱乐插件加载了 {len(components)} 个组件")
         return components

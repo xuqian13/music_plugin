@@ -2,12 +2,18 @@
 音乐模块 - 网易云音乐点歌
 
 基于网易云音乐和QQ音乐API的智能点歌插件
+
+功能：
+- 支持多音源：网易云、QQ音乐、聚合点歌、VIP音质
+- 智能搜索和选择
+- 数字快捷选择
+- 自动缓存管理
 """
 
 import aiohttp
 import asyncio
 import time
-from typing import Tuple, Optional, List, Any
+from typing import Tuple, Optional, List, Any, Dict
 from src.common.logger import get_logger
 from src.plugin_system.base.base_tool import BaseTool, ToolParamType
 from src.plugin_system.base.base_command import BaseCommand
@@ -19,114 +25,272 @@ logger = get_logger("entertainment_plugin.music")
 
 
 # ===== 全局搜索缓存 =====
-_search_cache = {}
+_search_cache: Dict[str, dict] = {}
+_search_cache_lock = asyncio.Lock()  # 缓存并发保护
 _CACHE_TTL = 1800  # 30分钟
+_cache_cleanup_task: Optional[asyncio.Task] = None
 
 
-def get_search_cache(key: str) -> Optional[dict]:
-    """获取搜索缓存"""
-    if key in _search_cache:
-        cache_data = _search_cache[key]
-        if time.time() - cache_data.get("timestamp", 0) < _CACHE_TTL:
-            return cache_data
-        else:
-            del _search_cache[key]
-    return None
+async def get_search_cache(key: str) -> Optional[dict]:
+    """
+    获取搜索缓存（线程安全，自动过期检查）
 
-
-def set_search_cache(key: str, keyword: str, results: List[dict], source: str = "netease"):
-    """设置搜索缓存"""
-    _search_cache[key] = {
-        "keyword": keyword,
-        "results": results,
-        "source": source,
-        "timestamp": time.time()
-    }
-
-
-# ===== QuickChooseCommand 动态管理器 =====
-_quick_choose_monitor_task = None
-_quick_choose_enabled = False
-
-
-def has_any_active_cache(timeout: int = 60) -> bool:
-    """检查是否有任何活跃的搜索缓存
+    特性：
+    - 使用asyncio.Lock确保并发访问安全
+    - 自动检查缓存是否过期（TTL=30分钟）
+    - 过期缓存自动删除
 
     Args:
+        key: 缓存键（通常是chat_id，如"music_search_group_123"或"music_search_user_456"）
+
+    Returns:
+        缓存数据字典或None（如果不存在或已过期）
+        - keyword: 搜索关键词
+        - results: 搜索结果列表
+        - source: 音乐源
+        - timestamp: 缓存时间戳
+    """
+    async with _search_cache_lock:
+        if key in _search_cache:
+            cache_data = _search_cache[key]
+            if time.time() - cache_data.get("timestamp", 0) < _CACHE_TTL:
+                return cache_data
+            else:
+                # 过期，删除缓存
+                del _search_cache[key]
+                logger.debug(f"缓存已过期并删除: {key}")
+        return None
+
+
+async def set_search_cache(key: str, keyword: str, results: List[dict], source: str = "netease"):
+    """
+    设置搜索缓存（线程安全）
+
+    特性：
+    - 使用asyncio.Lock确保并发写入安全
+    - 自动记录时间戳用于TTL检查
+    - 支持多音乐源缓存
+
+    Args:
+        key: 缓存键（如"music_search_group_123"）
+        keyword: 搜索关键词（如"晴天"）
+        results: 搜索结果列表（包含歌曲信息的字典列表）
+        source: 音乐源（netease/qq/netease_vip/qq_vip/juhe）
+    """
+    async with _search_cache_lock:
+        _search_cache[key] = {
+            "keyword": keyword,
+            "results": results,
+            "source": source,
+            "timestamp": time.time()
+        }
+        logger.debug(f"缓存已设置: {key}, 关键词={keyword}, 结果数={len(results)}")
+
+
+async def _cleanup_expired_cache():
+    """后台任务：定期清理过期缓存"""
+    while True:
+        try:
+            await asyncio.sleep(300)  # 每5分钟检查一次
+
+            async with _search_cache_lock:
+                current_time = time.time()
+                expired_keys = [
+                    key for key, data in _search_cache.items()
+                    if current_time - data.get("timestamp", 0) >= _CACHE_TTL
+                ]
+
+                for key in expired_keys:
+                    del _search_cache[key]
+
+                if expired_keys:
+                    logger.info(f"清理了 {len(expired_keys)} 个过期缓存")
+
+        except asyncio.CancelledError:
+            logger.debug("缓存清理任务被取消")
+            break
+        except Exception as e:
+            logger.error(f"缓存清理任务出错: {e}", exc_info=True)
+
+
+def start_cache_cleanup():
+    """启动缓存清理任务"""
+    global _cache_cleanup_task
+    if _cache_cleanup_task is None or _cache_cleanup_task.done():
+        _cache_cleanup_task = asyncio.create_task(_cleanup_expired_cache())
+        logger.info("缓存清理任务已启动")
+
+
+# ===== 公共音乐发送函数 =====
+
+async def send_music_info_to_command(
+    component,
+    music_info: dict,
+    config_getter: callable
+):
+    """
+    发送音乐信息到聊天（Command组件使用）
+
+    功能说明：
+    - 发送音乐信息文本（歌名、歌手、专辑、时长）
+    - 发送音乐卡片或语音消息（根据配置）
+    - 发送专辑封面图片（可选）
+    - 自动处理QQ音乐的语音模式
+
+    Args:
+        component: Command组件实例（需要有send_text、send_custom方法）
+        music_info: 音乐信息字典，包含：
+            - song: 歌曲名
+            - singer: 歌手
+            - album: 专辑名
+            - interval: 时长
+            - cover: 封面URL
+            - url: 播放链接
+            - id: 歌曲ID
+            - source: 音乐源（netease/qq/juhe等）
+        config_getter: 配置获取函数（如self.get_config）
+    """
+    try:
+        song = music_info.get("song", "未知歌曲")
+        singer = music_info.get("singer", "未知歌手")
+        album = music_info.get("album", "未知专辑")
+        interval = music_info.get("interval", "未知时长")
+        cover = music_info.get("cover", "")
+        url = music_info.get("url", "")
+        song_id = music_info.get("id", "")
+        music_source = music_info.get("source", "netease")
+
+        # 构建消息
+        message = f"🎵 【正在播放】\n\n"
+        message += f"🎤 歌曲：{song}\n"
+        message += f"🎙️ 歌手：{singer}\n"
+        message += f"💿 专辑：{album}\n"
+        message += f"⏱️ 时长：{interval}\n"
+
+        # 发送文本信息
+        if config_getter("music.show_info_text", True):
+            await component.send_text(message)
+
+        # 发送音乐卡片或语音
+        send_as_voice = config_getter("music.send_as_voice", False) or (music_source == "qq")
+
+        if send_as_voice:
+            if url:
+                await component.send_custom(message_type="voiceurl", content=url)
+            else:
+                await component.send_text("❌ 无法获取音乐播放链接")
+        else:
+            if song_id:
+                await component.send_custom(message_type="music", content=song_id)
+
+        # 发送封面
+        if cover and config_getter("music.show_cover", True):
+            timeout = config_getter("music.timeout", 10)
+            client = AsyncAPIClient(timeout)
+            base64_image = await client.download_image_base64(cover)
+            if base64_image:
+                await component.send_custom(message_type="image", content=base64_image)
+
+        logger.info(f"成功发送音乐《{song}》by {singer}")
+
+    except Exception as e:
+        logger.error(f"发送音乐信息出错: {e}", exc_info=True)
+
+
+async def send_music_info_to_stream(
+    stream_id: str,
+    music_info: dict,
+    config_getter: callable
+):
+    """
+    发送音乐信息到聊天流（Tool组件使用）
+
+    功能说明：
+    - 发送音乐信息文本（歌名、歌手、专辑、时长）
+    - 发送音乐卡片或语音消息（根据配置）
+    - 发送专辑封面图片（可选）
+    - 自动处理QQ音乐的语音模式
+
+    Args:
+        stream_id: 聊天流ID（用于send_api调用）
+        music_info: 音乐信息字典，包含：
+            - song: 歌曲名
+            - singer: 歌手
+            - album: 专辑名
+            - interval: 时长
+            - cover: 封面URL
+            - url: 播放链接
+            - id: 歌曲ID
+            - source: 音乐源（netease/qq/juhe等）
+        config_getter: 配置获取函数（如self.get_config）
+    """
+    try:
+        song = music_info.get("song", "未知歌曲")
+        singer = music_info.get("singer", "未知歌手")
+        album = music_info.get("album", "未知专辑")
+        interval = music_info.get("interval", "未知时长")
+        cover = music_info.get("cover", "")
+        url = music_info.get("url", "")
+        song_id = music_info.get("id", "")
+        music_source = music_info.get("source", "netease")
+
+        # 构建消息
+        message = f"🎵 【正在播放】\n\n"
+        message += f"🎤 歌曲：{song}\n"
+        message += f"🎙️ 歌手：{singer}\n"
+        message += f"💿 专辑：{album}\n"
+        message += f"⏱️ 时长：{interval}\n"
+
+        # 发送文本信息
+        if config_getter("music.show_info_text", True):
+            await send_api.text_to_stream(message, stream_id)
+
+        # 发送音乐卡片或语音
+        send_as_voice = config_getter("music.send_as_voice", False) or (music_source == "qq")
+
+        if send_as_voice:
+            if url:
+                await send_api.custom_to_stream("voiceurl", url, stream_id)
+            else:
+                logger.warning("无法获取音乐播放链接")
+        else:
+            if song_id:
+                await send_api.custom_to_stream("music", song_id, stream_id)
+
+        # 发送封面
+        if cover and config_getter("music.show_cover", True):
+            timeout = config_getter("music.timeout", 10)
+            client = AsyncAPIClient(timeout)
+            base64_image = await client.download_image_base64(cover)
+            if base64_image:
+                await send_api.custom_to_stream("image", base64_image, stream_id)
+
+        logger.info(f"成功发送音乐《{song}》到聊天流 {stream_id}")
+
+    except Exception as e:
+        logger.error(f"发送音乐信息到流出错: {e}", exc_info=True)
+
+
+# ===== 快捷选择辅助函数（已简化）=====
+
+async def is_quick_choose_valid(chat_id: str, timeout: int = 60) -> bool:
+    """
+    检查快捷选择是否有效（缓存是否在超时时间内）
+
+    Args:
+        chat_id: 聊天ID
         timeout: 快捷选择超时时间（秒）
 
     Returns:
-        bool: 如果有任何缓存在超时时间内，返回 True
+        bool: 是否有效
     """
-    current_time = time.time()
-    for cache_data in _search_cache.values():
-        cache_timestamp = cache_data.get("timestamp", 0)
-        if current_time - cache_timestamp < timeout:
-            return True
-    return False
+    cache = await get_search_cache(chat_id)
+    if not cache:
+        return False
 
-
-async def _quick_choose_monitor(timeout: int = 60):
-    """后台监控任务：定期检查缓存状态，自动禁用 QuickChooseCommand"""
-    global _quick_choose_enabled, _quick_choose_monitor_task
-
-    try:
-        while True:
-            await asyncio.sleep(5)  # 每5秒检查一次
-
-            # 检查是否还有活跃缓存
-            if not has_any_active_cache(timeout):
-                # 所有缓存都过期了，禁用 QuickChooseCommand
-                try:
-                    from src.plugin_system.core.component_registry import component_registry
-                    from src.plugin_system.base.component_types import ComponentType
-
-                    await component_registry.disable_component("quick_choose", ComponentType.COMMAND)
-                except Exception as disable_error:
-                    # 忽略禁用时的错误（可能已经禁用或框架问题）
-                    logger.debug(f"禁用快捷选择时出现错误（可忽略）: {disable_error}")
-
-                _quick_choose_enabled = False
-                logger.info("🔇 快捷选择已自动禁用（无活跃搜索）")
-
-                # 停止监控任务
-                _quick_choose_monitor_task = None
-                break
-
-    except asyncio.CancelledError:
-        logger.debug("快捷选择监控任务被取消")
-    except Exception as e:
-        logger.error(f"快捷选择监控任务出错: {e}", exc_info=True)
-
-
-async def enable_quick_choose_if_needed(timeout: int = 60):
-    """如果 QuickChooseCommand 未启用，则启用它并启动监控任务
-
-    Args:
-        timeout: 快捷选择超时时间（秒）
-    """
-    global _quick_choose_enabled, _quick_choose_monitor_task
-
-    if not _quick_choose_enabled:
-        try:
-            from src.plugin_system.core.component_registry import component_registry
-            from src.plugin_system.base.component_types import ComponentType
-
-            # 启用 QuickChooseCommand
-            if component_registry.enable_component("quick_choose", ComponentType.COMMAND):
-                _quick_choose_enabled = True
-                logger.info("🔊 快捷选择已自动启用")
-            else:
-                logger.warning("启用快捷选择失败")
-                return
-        except Exception as e:
-            logger.error(f"启用快捷选择时出错: {e}", exc_info=True)
-            return
-
-    # 启动或重启监控任务
-    if _quick_choose_monitor_task is None or _quick_choose_monitor_task.done():
-        _quick_choose_monitor_task = asyncio.create_task(_quick_choose_monitor(timeout))
-        logger.debug("快捷选择监控任务已启动")
+    # 检查缓存是否在快捷选择超时时间内
+    cache_age = time.time() - cache.get("timestamp", 0)
+    return cache_age < timeout
 
 
 # ===== 音乐源适配器 =====
@@ -726,12 +890,8 @@ class MusicCommand(BaseCommand):
             group_id = self.message.message_info.group_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'group_id') else None
             search_key = f"music_search_group_{group_id}" if group_id else f"music_search_user_{user_id}"
 
-            set_search_cache(search_key, song_name, music_list, source=successful_source)
+            await set_search_cache(search_key, song_name, music_list, source=successful_source)
             logger.info(f"已保存 {len(music_list)} 个搜索结果到缓存: {search_key}")
-
-            # 自动启用快捷选择功能
-            quick_choose_timeout = self.get_config("music.quick_choose_timeout", 60)
-            await enable_quick_choose_if_needed(quick_choose_timeout)
 
             # 发送列表（图片或文本）
             source_display_name = adapter.source_display_name if adapter else ""
@@ -776,7 +936,7 @@ class ChooseCommand(BaseCommand):
             group_id = self.message.message_info.group_id if hasattr(self.message, 'message_info') and hasattr(self.message.message_info, 'group_id') else None
             search_key = f"music_search_group_{group_id}" if group_id else f"music_search_user_{user_id}"
 
-            search_data = get_search_cache(search_key)
+            search_data = await get_search_cache(search_key)
             if not search_data:
                 await self.send_text("❌ 没有找到搜索记录，请先使用 /music 搜索歌曲")
                 return False, "无搜索记录", True
@@ -815,49 +975,8 @@ class ChooseCommand(BaseCommand):
             return False, f"选择失败: {e}", True
 
     async def _send_music_info(self, music_info: dict):
-        """发送音乐信息"""
-        try:
-            song = music_info.get("song", "未知歌曲")
-            singer = music_info.get("singer", "未知歌手")
-            album = music_info.get("album", "未知专辑")
-            interval = music_info.get("interval", "未知时长")
-            cover = music_info.get("cover", "")
-            url = music_info.get("url", "")
-            song_id = music_info.get("id", "")
-            music_source = music_info.get("source", "netease")
-
-            # 构建消息
-            message = f"🎵 【正在播放】\n\n"
-            message += f"🎤 歌曲：{song}\n"
-            message += f"🎙️ 歌手：{singer}\n"
-            message += f"💿 专辑：{album}\n"
-            message += f"⏱️ 时长：{interval}\n"
-
-            if self.get_config("music.show_info_text", True):
-                await self.send_text(message)
-
-            # 发送音乐
-            send_as_voice = self.get_config("music.send_as_voice", False) or (music_source == "qq")
-
-            if send_as_voice:
-                if url:
-                    await self.send_custom(message_type="voiceurl", content=url)
-                else:
-                    await self.send_text("❌ 无法获取音乐播放链接")
-            else:
-                if song_id:
-                    await self.send_custom(message_type="music", content=song_id)
-
-            # 发送封面
-            if cover and self.get_config("music.show_cover", True):
-                timeout = self.get_config("music.timeout", 10)
-                client = AsyncAPIClient(timeout)
-                base64_image = await client.download_image_base64(cover)
-                if base64_image:
-                    await self.send_custom(message_type="image", content=base64_image)
-
-        except Exception as e:
-            logger.error(f"发送音乐信息出错: {e}", exc_info=True)
+        """发送音乐信息（调用公共函数）"""
+        await send_music_info_to_command(self, music_info, self.get_config)
 
     @classmethod
     def get_command_info(cls):
@@ -900,7 +1019,7 @@ class QuickChooseCommand(BaseCommand):
             search_key = f"music_search_group_{group_id}" if group_id else f"music_search_user_{user_id}"
 
             # 3. 检查是否有搜索缓存（最重要：没有搜索就不监听数字）
-            search_data = get_search_cache(search_key)
+            search_data = await get_search_cache(search_key)
             if not search_data:
                 return False, "", False
 
@@ -955,49 +1074,8 @@ class QuickChooseCommand(BaseCommand):
             return False, f"快捷选择失败: {e}", False
 
     async def _send_music_info(self, music_info: dict):
-        """发送音乐信息"""
-        try:
-            song = music_info.get("song", "未知歌曲")
-            singer = music_info.get("singer", "未知歌手")
-            album = music_info.get("album", "未知专辑")
-            interval = music_info.get("interval", "未知时长")
-            cover = music_info.get("cover", "")
-            url = music_info.get("url", "")
-            song_id = music_info.get("id", "")
-            music_source = music_info.get("source", "netease")
-
-            # 构建消息
-            message = f"🎵 【正在播放】\n\n"
-            message += f"🎤 歌曲：{song}\n"
-            message += f"🎙️ 歌手：{singer}\n"
-            message += f"💿 专辑：{album}\n"
-            message += f"⏱️ 时长：{interval}\n"
-
-            if self.get_config("music.show_info_text", True):
-                await self.send_text(message)
-
-            # 发送音乐
-            send_as_voice = self.get_config("music.send_as_voice", False) or (music_source == "qq")
-
-            if send_as_voice:
-                if url:
-                    await self.send_custom(message_type="voiceurl", content=url)
-                else:
-                    await self.send_text("❌ 无法获取音乐播放链接")
-            else:
-                if song_id:
-                    await self.send_custom(message_type="music", content=song_id)
-
-            # 发送封面
-            if cover and self.get_config("music.show_cover", True):
-                timeout = self.get_config("music.timeout", 10)
-                client = AsyncAPIClient(timeout)
-                base64_image = await client.download_image_base64(cover)
-                if base64_image:
-                    await self.send_custom(message_type="image", content=base64_image)
-
-        except Exception as e:
-            logger.error(f"发送音乐信息出错: {e}", exc_info=True)
+        """发送音乐信息（调用公共函数）"""
+        await send_music_info_to_command(self, music_info, self.get_config)
 
     @classmethod
     def get_command_info(cls):
@@ -1104,54 +1182,10 @@ class PlayMusicTool(BaseTool):
             return {"name": self.name, "content": f"❌ 播放失败: {str(e)}"}
 
     async def _send_music_to_chat(self, music_info: dict):
-        """发送音乐到聊天流"""
-        try:
-            if not self.chat_stream:
-                logger.error("[PlayMusicTool] chat_stream 未初始化")
-                return
+        """发送音乐到聊天流（调用公共函数）"""
+        if not self.chat_stream:
+            logger.error("[PlayMusicTool] chat_stream 未初始化")
+            return
 
-            stream_id = self.chat_stream.stream_id
-            song = music_info.get("song", "未知歌曲")
-            singer = music_info.get("singer", "未知歌手")
-            album = music_info.get("album", "未知专辑")
-            interval = music_info.get("interval", "未知时长")
-            cover = music_info.get("cover", "")
-            url = music_info.get("url", "")
-            song_id = music_info.get("id", "")
-            music_source = music_info.get("source", "netease")
-
-            # 构建消息
-            message = f"🎵 【正在播放】\n\n"
-            message += f"🎤 歌曲：{song}\n"
-            message += f"🎙️ 歌手：{singer}\n"
-            message += f"💿 专辑：{album}\n"
-            message += f"⏱️ 时长：{interval}\n"
-
-            # 发送文本信息
-            if self.get_config("music.show_info_text", True):
-                await send_api.text_to_stream(message, stream_id)
-
-            # 发送音乐卡片或语音
-            send_as_voice = self.get_config("music.send_as_voice", False) or (music_source == "qq")
-
-            if send_as_voice:
-                if url:
-                    await send_api.custom_to_stream("voiceurl", url, stream_id)
-                else:
-                    logger.warning("[PlayMusicTool] 无法获取音乐播放链接")
-            else:
-                if song_id:
-                    await send_api.custom_to_stream("music", song_id, stream_id)
-
-            # 发送封面
-            if cover and self.get_config("music.show_cover", True):
-                timeout = self.get_config("music.timeout", 10)
-                client = AsyncAPIClient(timeout)
-                base64_image = await client.download_image_base64(cover)
-                if base64_image:
-                    await send_api.custom_to_stream("image", base64_image, stream_id)
-
-            logger.info(f"[PlayMusicTool] 已发送音乐《{song}》到聊天流 {stream_id}")
-
-        except Exception as e:
-            logger.error(f"[PlayMusicTool] 发送音乐信息出错: {e}", exc_info=True)
+        stream_id = self.chat_stream.stream_id
+        await send_music_info_to_stream(stream_id, music_info, self.get_config)

@@ -40,7 +40,7 @@ timeout = 30                                                # API请求超时时
 max_search_results = 10                                     # 最大搜索结果数
 show_cover = false                                           # 是否显示专辑封面
 show_info_text = false                                       # 是否显示音乐信息文本
-send_as_voice = true                                       # 是否以语音消息发送音乐 (true=语音消息, false=音乐卡片)
+send_as_voice = false                                       # 是否以语音消息发送音乐 (true=语音消息, false=音乐卡片)
 enable_quick_choose = true                                   # 是否启用数字快捷选择 (直接输入1-10选歌)
 quick_choose_timeout = 60                                   # 快捷选择有效期(秒) 默认60秒，超时后自动禁用数字监听
 
@@ -50,6 +50,8 @@ api_url = "https://api.xingzhige.com/API/DrawOne/"         # AI绘图API地址
 default_prompt = "jk"                                       # 默认描述词(当用户未提供时使用)
 timeout = 30                                                # API请求超时时间(秒)
 selection_mode = "best"                                     # 图片选择模式: best=智能最佳匹配, random=随机选择, all=发送全部(最多4张)
+self_prompt = "猫娘 猫耳 白发 日系二次元 插画风格 少女 可爱 萌"  # 人设描述词(当用户要求画"小雪"、"你"、"自拍"时使用)
+auto_image_enabled = true                                   # 是否启用自动配图检测（检测bot回复是否需要配图）
 
 # =====================================================
 # 使用说明：
@@ -83,16 +85,29 @@ selection_mode = "best"                                     # 图片选择模式
 # - juhe: 聚合点歌(整合多个音乐平台)
 #
 # AI绘图功能：
-# - 关键词触发：AI绘图、画图、绘图、生成图片、画一张
-#   例如：AI绘图 可爱的猫咪
-#         画一张 美丽的风景
-# - 命令触发：/draw 或 /绘图 或 /画图 <描述词>
+# - 命令触发（通过Command）：/draw 或 /绘图 或 /画图 <描述词>
 #   例如：/draw jk
 #         /绘图 可爱的猫咪
 #         /画图 动漫少女
+# - 智能工具调用（统一AI绘图工具）：
+#   * LLM可智能判断何时调用ai_draw_tool
+#   * 支持三种场景：
+#     1. 主动画图：用户要求"画图"、"画个xxx"、"来张xxx"时，LLM调用tool并传入描述词
+#        例如：用户说"画个猫娘" → LLM调用ai_draw_tool(prompt="猫娘")
+#     2. 自动配图：当你的回复描述了场景时，LLM主动调用tool配图
+#        例如：bot回复"刚拍完毛线球缠住爪子" → LLM调用ai_draw_tool(auto_scene=True, scene_description="毛线球 缠住爪子")
+#     3. 换风格：用户说"换个风格"、"再来一张"时，LLM调用tool的change_style参数
+#        例如：用户说"换个风格" → LLM调用ai_draw_tool(change_style=True)
+#   * 统一使用优化的风格匹配算法
+#   * 统一的缓存管理，支持Command/Tool之间的换风格功能
 # - 选择模式说明：
 #   * best (推荐): 智能分析creation_prompt与用户描述词的匹配度,选择最相关的一张
+#     - 优先匹配风格关键词（如"日系"、"二次元"、"插画"权重更高）
+#     - 降低不符合人设的风格（如"手绘"、"绘本"、"水彩"权重较低）
 #   * random: 从API返回的多张图片中随机选择一张
 #   * all: 发送API返回的所有图片(最多4张)
+# - 人设描述词配置：
+#   * self_prompt: 当用户要求画bot自己时使用的描述词（如"画个小雪"、"自拍"）
+#   * 建议包含明确的风格指向（如"日系二次元"、"插画风格"）以获得更符合人设的图片
 #
 # =====================================================
