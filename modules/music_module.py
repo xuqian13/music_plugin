@@ -385,14 +385,26 @@ class NeteaseAdapter(MusicSourceAdapter):
                 params=params,
                 log_prefix="[Netease]"
             )
+            logger.debug(f"[NeteaseAdapter] get_music_detail返回数据: {data}")
+
             if data and data.get("code") == 200:
                 result_data = data.get("data", {})
+                logger.debug(f"[NeteaseAdapter] result_data类型: {type(result_data)}, 内容: {result_data}")
+
                 if isinstance(result_data, list) and len(result_data) > 0:
                     result_data = result_data[0]
+                    logger.debug(f"[NeteaseAdapter] 从列表取第一个: {result_data}")
+
                 if result_data and isinstance(result_data, dict):
-                    return self.normalize_music_info(result_data)
+                    normalized = self.normalize_music_info(result_data)
+                    logger.debug(f"[NeteaseAdapter] 标准化后的数据: {normalized}")
+                    return normalized
+                else:
+                    logger.warning(f"[NeteaseAdapter] result_data无效: type={type(result_data)}, value={result_data}")
+            else:
+                logger.warning(f"[NeteaseAdapter] API返回错误: code={data.get('code') if data else None}, data={data}")
         except Exception as e:
-            logger.error(f"[NeteaseAdapter] 获取详情失败: {e}")
+            logger.error(f"[NeteaseAdapter] 获取详情失败: {e}", exc_info=True)
         return None
 
     def normalize_music_info(self, data: dict) -> dict:
