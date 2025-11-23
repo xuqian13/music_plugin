@@ -69,7 +69,7 @@ class EntertainmentPlugin(BasePlugin):
             ),
             "version": ConfigField(
                 type=str,
-                default="1.0.0",
+                default="1.3.0",
                 description="插件版本"
             )
         },
