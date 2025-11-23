@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "娱乐插件",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "整合了看看腿、新闻、音乐、AI绘图等娱乐功能的统一插件，提供图片、新闻资讯、音乐点歌、AI生成图片等多种娱乐服务",
   "author": {
     "name": "靓仔",
