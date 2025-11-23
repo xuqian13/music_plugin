@@ -27,7 +27,7 @@ logger = get_logger("entertainment_plugin.music")
 # ===== 全局搜索缓存 =====
 _search_cache: Dict[str, dict] = {}
 _search_cache_lock = asyncio.Lock()  # 缓存并发保护
-_CACHE_TTL = 1800  # 30分钟
+_CACHE_TTL = 60  # 60秒（与快捷选择超时时间保持一致）
 _cache_cleanup_task: Optional[asyncio.Task] = None
 
 
@@ -37,7 +37,7 @@ async def get_search_cache(key: str) -> Optional[dict]:
 
     特性：
     - 使用asyncio.Lock确保并发访问安全
-    - 自动检查缓存是否过期（TTL=30分钟）
+    - 自动检查缓存是否过期（TTL=60秒）
     - 过期缓存自动删除
     - 缓存清空后自动禁用快捷选择命令
 
@@ -113,7 +113,7 @@ async def _cleanup_expired_cache():
     """后台任务：定期清理过期缓存，自动禁用命令"""
     while True:
         try:
-            await asyncio.sleep(300)  # 每5分钟检查一次
+            await asyncio.sleep(60)  # 每1分钟检查一次
 
             async with _search_cache_lock:
                 current_time = time.time()
