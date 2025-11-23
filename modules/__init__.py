@@ -3,6 +3,8 @@
 from .image_module import RandomImageAction, RandomImageCommand
 from .news_module import News60sTool, TodayInHistoryTool, NewsCommand, HistoryCommand
 from .music_module import MusicCommand, ChooseCommand, QuickChooseCommand
+from .ai_draw_module import AIDrawAction, AIDrawCommand
+from .ai_draw_tool import AIDrawTool
 
 __all__ = [
     # 图片模块
@@ -17,4 +19,8 @@ __all__ = [
     'MusicCommand',
     'ChooseCommand',
     'QuickChooseCommand',
+    # AI绘图模块
+    'AIDrawAction',
+    'AIDrawCommand',
+    'AIDrawTool',
 ]

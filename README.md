@@ -63,11 +63,17 @@
 ```
 
 ### 🎨 AI绘图功能
-基于AI的智能图片生成，支持多种描述词
+基于AI的智能图片生成，支持人设联动和换风格功能
 
 **触发方式：**
-- 关键词：AI绘图、画图、绘图、生成图片、画一张
+- 关键词：AI绘图、画图、绘图、画一张、画个、自拍、来个、来张等
 - 命令：`/draw` 或 `/绘图` 或 `/画图 [描述词]`
+- Tool：可供LLM智能调用
+
+**智能功能：**
+- **人设联动**：说"画你自己"、"自拍"、"画小雪"等会自动使用人设描述词
+- **换风格**：API返回多张图片，说"换个风格"、"下一张"可查看其他风格
+- **LLM Tool调用**：LLM可智能判断何时调用画图，并生成合适的描述词
 
 **选择模式：**
 - `best` - 智能分析匹配度，选择最相关的一张（推荐）
@@ -78,9 +84,12 @@
 ```
 AI绘图 可爱的猫咪              # 关键词触发
 画一张 美丽的风景
+画个你自己                     # 自动使用人设描述词
+小雪来个自拍                   # 自动使用人设描述词
 /draw jk                      # 命令触发
 /绘图 动漫少女
-/画图 赛博朋克风格城市
+换个风格                       # 发送缓存的其他风格图片
+下一张                         # 同上
 ```
 
 ## 📁 目录结构
@@ -97,7 +106,8 @@ entertainment_plugin/
 │   ├── image_module.py      # 看看腿功能
 │   ├── news_module.py       # 新闻功能
 │   ├── music_module.py      # 音乐功能（支持5种音源）
-│   └── ai_draw_module.py    # AI绘图功能
+│   ├── ai_draw_module.py    # AI绘图Action/Command
+│   └── ai_draw_tool.py      # AI绘图Tool（供LLM调用）
 └── utils/                   # 共用工具
     ├── __init__.py
     ├── api_client.py        # API请求封装
@@ -158,6 +168,7 @@ api_url = "https://api.xingzhige.com/API/DrawOne/"
 default_prompt = "jk"                                      # 默认描述词
 timeout = 30
 selection_mode = "best"                                    # best/random/all
+self_prompt = ""                                           # 人设描述词（留空自动从bot_config生成）
 ```
 
 ## 🎯 组件列表
@@ -174,8 +185,9 @@ selection_mode = "best"                                    # best/random/all
 | Command | MusicCommand | 音乐搜索命令 |
 | Command | ChooseCommand | 选择歌曲命令 |
 | Command | QuickChooseCommand | 快捷选择命令（数字1-10） |
-| Action | AIDrawAction | 关键词触发AI绘图 |
+| Action | AIDrawAction | 关键词触发AI绘图（支持人设联动、换风格） |
 | Command | AIDrawCommand | 命令触发AI绘图 |
+| Tool | AIDrawTool | AI绘图工具（可供LLM智能调用） |
 
 ## 📦 依赖项
 
@@ -220,6 +232,13 @@ pip install aiohttp Pillow
 - **聚合点歌 (juhe)**: 整合多个音乐平台（酷我、网易等），智能选择最佳源
 
 ## 📝 版本历史
+
+### v1.3.0 (2025-11-23)
+- AI绘图新增人设联动功能，自动从bot_config读取昵称和人设
+- AI绘图新增换风格功能，支持"换个风格"、"下一张"等指令
+- AI绘图新增LLM Tool支持，可由LLM智能调用
+- 新增更多触发关键词：自拍、来个、来张、画个等
+- 修复人设关键词检测逻辑，改为在原始消息中检测
 
 ### v1.2.0 (2025-11-23)
 - 新增聚合点歌功能，支持多平台音乐源
