@@ -38,7 +38,7 @@ class EntertainmentPlugin(BasePlugin):
 
     plugin_name = "entertainment_plugin"
     plugin_description = "整合了看看腿、新闻、音乐等娱乐功能的统一插件"
-    plugin_version = "1.0.0"
+    plugin_version = "1.3.0"
     plugin_author = "Augment Agent"
     enable_plugin = True
     config_file_name = "config.toml"
