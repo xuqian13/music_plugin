@@ -27,15 +27,11 @@ class AIDrawTool(BaseTool):
     """
 
     name = "ai_draw_tool"
-    description = """智能AI绘图工具，支持三种使用场景：
-1. 主动绘图：用户要求画图、绘图、生成图片时
-2. 自动配图：当你的回复中描述了场景、动作或状态时，主动调用为回复配图
-3. 换风格：用户说"换个风格"、"再来一张"时，发送之前缓存的其他风格图片
-
-示例场景：
-- 用户："画个小雪" → prompt="self", auto_scene=False
-- 你回复："刚拍完毛线球缠住爪子的蠢样子" → prompt="", auto_scene=True, scene_description="毛线球 缠住爪子 可爱"
-- 用户："换个风格" → change_style=True"""
+    description = """AI绘图工具，生成二次元风格图片。三种场景：
+1. 主动画图：用户说"画xxx"时，设prompt=描述词，auto_scene=False
+2. 自动配图：你回复描述了场景需配图时，设auto_scene=True，scene_description=关键词
+3. 换风格：用户说"换个风格/再来一张"时，设change_style=True
+特殊：用户要求画"你自己/小雪"时，prompt填"self"（自动用bot人设生成描述词）"""
 
     parameters = [
         ("prompt", ToolParamType.STRING, "图片描述词。如'猫娘'、'风景'、'jk少女'。用户要求画'你自己'/'小雪'时填'self'。自动配图时可为空。", False, None),

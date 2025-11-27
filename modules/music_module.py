@@ -1139,7 +1139,7 @@ class PlayMusicTool(BaseTool):
     """播放音乐 Tool - 供AI主动调用"""
 
     name = "play_music"
-    description = "搜索并播放歌曲。重要：调用此工具时必须提供具体歌名。如果用户没指定歌名（如'推首歌'），AI应该根据聊天上下文、用户情绪、喜好等自行推荐一首合适的歌曲，然后将歌名作为参数传给此工具"
+    description = "搜索并播放音乐。用户要求听歌、播放歌曲时调用。支持多音源(网易云/QQ音乐/VIP音质/聚合)。重要：用户未指定歌名时，AI需根据上下文/情绪推荐合适的歌曲"
     parameters = [
         ("song_name", ToolParamType.STRING, "歌曲名称或歌手+歌名，必填。AI需要填写具体歌名，不能为空", True, None),
         ("source", ToolParamType.STRING, "音乐源，可选netease(网易云)、qq(QQ音乐)、netease_vip(网易云VIP)、qq_vip(QQ音乐VIP)、juhe(聚合点歌)，默认netease", False, ["netease", "qq", "netease_vip", "qq_vip", "juhe"])

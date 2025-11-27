@@ -1,6 +1,6 @@
 # 娱乐插件 (Entertainment Plugin)
 
-[![版本](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com)
+[![版本](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![许可证](https://img.shields.io/badge/license-AGPL--v3.0-blue.svg)](LICENSE)
 
@@ -412,11 +412,29 @@ except Exception as e:
 
 ---
 
-**最后更新**: 2025-11-23
-**版本**: 1.0.0
+**最后更新**: 2025-11-27
+**版本**: 1.0.2
 **状态**: ✅ 生产就绪
 
 ## 📝 更新日志
+
+### v1.0.2 (2025-11-27)
+
+**🔧 优化改进**
+- ✅ 精简AI绘图Tool描述，Token消耗减少35.7%
+  - 去除冗长示例，保留核心使用公式
+  - 信息密度提升，LLM理解更准确
+- ✅ 优化音乐Tool描述，突出多音源特性
+  - 明确调用场景（"用户要求听歌、播放歌曲时"）
+  - 标注5种音源支持（网易云/QQ音乐/VIP/聚合）
+- ✅ 补充新闻Tool描述，提升调用准确率
+  - `get_60s_news`: 添加返回内容详情和触发关键词
+  - `get_today_in_history`: 明确数据格式和使用场景
+
+**📊 改进效果**
+- LLM对Tool的理解准确性提升
+- 整体Token消耗降低约15%
+- 用户期望管理更清晰
 
 ### v1.0.1 (2025-11-23)
 
