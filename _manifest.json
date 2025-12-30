@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "name": "娱乐插件",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "整合了看看腿、新闻、音乐、AI绘图等娱乐功能的统一插件，提供图片、新闻资讯、音乐点歌、AI生成图片等多种娱乐服务",
   "author": {
     "name": "靓仔",
@@ -13,11 +13,40 @@
     "max_version": "1.0.0"
   },
   "repository_url": "https://github.com/xuqian13/music_plugin",
-  "keywords": ["娱乐", "图片", "新闻", "音乐", "点歌", "看看腿", "60秒", "网易云", "QQ音乐", "VIP音质", "聚合点歌", "AI绘图", "AI生成"],
-  "categories": ["Entertainment", "Music", "Information", "Image"],
-  "tags": ["娱乐", "图片", "新闻", "音乐", "AI绘图", "多功能"],
+  "keywords": [
+    "娱乐",
+    "图片",
+    "新闻",
+    "音乐",
+    "点歌",
+    "看看腿",
+    "60秒",
+    "网易云",
+    "QQ音乐",
+    "VIP音质",
+    "聚合点歌",
+    "AI绘图",
+    "AI生成"
+  ],
+  "categories": [
+    "Entertainment",
+    "Music",
+    "Information",
+    "Image"
+  ],
+  "tags": [
+    "娱乐",
+    "图片",
+    "新闻",
+    "音乐",
+    "AI绘图",
+    "多功能"
+  ],
   "dependencies": [],
-  "python_dependencies": ["aiohttp", "Pillow"],
+  "python_dependencies": [
+    "aiohttp",
+    "Pillow"
+  ],
   "config_file": "config.toml",
   "enabled": true,
   "components": {
@@ -44,13 +73,27 @@
         "name": "random_image_action",
         "description": "获取随机腿部图片并发送",
         "activation": "keyword",
-        "keywords": ["看看腿", "腿", "看腿", "康康腿", "看看大长腿", "大长腿"]
+        "keywords": [
+          "看看腿",
+          "腿",
+          "看腿",
+          "康康腿",
+          "看看大长腿",
+          "大长腿"
+        ]
       },
       {
         "name": "ai_draw_action",
         "description": "根据描述词生成AI图片",
         "activation": "keyword",
-        "keywords": ["AI绘图", "ai绘图", "画图", "绘图", "生成图片", "画一张"]
+        "keywords": [
+          "AI绘图",
+          "ai绘图",
+          "画图",
+          "绘图",
+          "生成图片",
+          "画一张"
+        ]
       }
     ],
     "commands": [
@@ -116,5 +159,6 @@
       "music_enabled": true,
       "ai_draw_enabled": true
     }
-  }
+  },
+  "id": "靓仔.music_plugin"
 }

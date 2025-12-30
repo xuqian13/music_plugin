@@ -11,6 +11,7 @@ from src.plugin_system import (
     ComponentInfo,
     ConfigField
 )
+from src.plugin_system.base.config_types import ConfigSection, ConfigLayout, ConfigTab
 from src.common.logger import get_logger
 
 # 导入各个模块的组件
@@ -18,8 +19,10 @@ from .modules.image_module import RandomImageAction, RandomImageCommand
 from .modules.news_module import (
     News60sTool,
     TodayInHistoryTool,
+    AINewsTool,
     NewsCommand,
-    HistoryCommand
+    HistoryCommand,
+    AINewsCommand
 )
 from .modules.music_module import (
     PlayMusicTool,
@@ -39,7 +42,7 @@ class EntertainmentPlugin(BasePlugin):
 
     plugin_name = "entertainment_plugin"
     plugin_description = "整合了看看腿、新闻、音乐等娱乐功能的统一插件"
-    plugin_version = "1.0.0"
+    plugin_version = "1.0.3"
     plugin_author = "Augment Agent"
     enable_plugin = True
     config_file_name = "config.toml"
@@ -48,12 +51,62 @@ class EntertainmentPlugin(BasePlugin):
 
     # 配置节描述
     config_section_descriptions = {
-        "plugin": "插件基本配置",
-        "modules": "功能模块开关",
-        "image": "看看腿功能配置",
-        "news": "新闻功能配置",
-        "music": "音乐功能配置"
+        "plugin": ConfigSection(
+            title="插件设置",
+            description="插件的基础配置",
+            icon="🔧",
+            collapsed=False,
+            order=0
+        ),
+        "modules": ConfigSection(
+            title="功能模块",
+            description="选择要启用的娱乐功能模块",
+            icon="🎮",
+            collapsed=False,
+            order=1
+        ),
+        "image": ConfigSection(
+            title="随机图片配置",
+            description="配置随机图片API和相关参数",
+            icon="🖼️",
+            collapsed=True,
+            order=2
+        ),
+        "news": ConfigSection(
+            title="新闻资讯配置",
+            description="配置60秒新闻和历史上的今天API",
+            icon="📰",
+            collapsed=True,
+            order=3
+        ),
+        "music": ConfigSection(
+            title="音乐点歌配置",
+            description="配置音乐点歌相关参数",
+            icon="🎵",
+            collapsed=True,
+            order=4
+        ),
+        "ai_draw": ConfigSection(
+            title="AI绘图配置",
+            description="配置AI绘图API和参数",
+            icon="🎨",
+            collapsed=True,
+            order=5
+        )
     }
+
+    # 布局配置 - 使用标签页布局
+    config_layout = ConfigLayout(
+        type="tabs",
+        tabs=[
+            ConfigTab(id="plugin", title="插件", icon="🔧", sections=["plugin"], order=0),
+            ConfigTab(id="modules", title="功能模块", icon="🎮", sections=["modules"], order=1),
+            ConfigTab(id="image", title="图片", icon="🖼️", sections=["image"], order=2),
+            ConfigTab(id="news", title="新闻", icon="📰", sections=["news"], order=3),
+            ConfigTab(id="music", title="音乐", icon="🎵", sections=["music"], order=4),
+            ConfigTab(id="ai_draw", title="AI绘图", icon="🎨", sections=["ai_draw"], order=5),
+        ]
+    )
 
     # 配置 Schema
     config_schema = {
@@ -124,20 +177,30 @@ class EntertainmentPlugin(BasePlugin):
                 default="https://60s.viki.moe/v2/today-in-history",
                 description="历史上的今天API地址"
             ),
+            "ai_news_api_url": ConfigField(
+                type=str,
+                default="https://60s.viki.moe/v2/ai-news",
+                description="每日AI资讯API地址"
+            ),
             "send_image": ConfigField(
                 type=bool,
                 default=True,
-                description="是否发送新闻图片"
+                description="是否发送60秒新闻图片"
             ),
             "send_text": ConfigField(
                 type=bool,
                 default=True,
-                description="是否发送新闻文本"
+                description="是否发送60秒新闻文本"
             ),
             "max_history_events": ConfigField(
                 type=int,
                 default=10,
                 description="历史事件最大显示数量"
+            ),
+            "max_ai_news": ConfigField(
+                type=int,
+                default=5,
+                description="AI资讯最大显示数量"
             )
         },
         "music": {
@@ -253,8 +316,10 @@ class EntertainmentPlugin(BasePlugin):
         if news_enabled:
             components.append((News60sTool.get_tool_info(), News60sTool))
             components.append((TodayInHistoryTool.get_tool_info(), TodayInHistoryTool))
+            components.append((AINewsTool.get_tool_info(), AINewsTool))
             components.append((NewsCommand.get_command_info(), NewsCommand))
             components.append((HistoryCommand.get_command_info(), HistoryCommand))
+            components.append((AINewsCommand.get_command_info(), AINewsCommand))
             logger.info("已启用新闻模块")
 
         # 音乐模块

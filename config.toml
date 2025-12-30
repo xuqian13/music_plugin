@@ -7,14 +7,14 @@
 [plugin]
 enabled = true                          # 是否启用插件
 name = "entertainment_plugin"           # 插件名称
-version = "1.0.0"                       # 插件版本
+version = "1.0.3"                       # 插件版本
 
 # ============ 功能模块开关 ============
 [modules]
 image_enabled = false                    # 是否启用看看腿功能
 news_enabled = true                     # 是否启用新闻功能
 music_enabled = true                    # 是否启用音乐功能
-ai_draw_enabled = true                  # 是否启用AI绘图功能
+ai_draw_enabled = false                  # 是否启用AI绘图功能
 
 # ============ 看看腿功能配置 ============
 [image]
@@ -26,9 +26,11 @@ available_classes = [101, 102, 103, 104]                    # 可用的图片类
 [news]
 api_url = "https://60api.09cdn.xyz/v2/60s"                     # 60秒新闻API地址
 history_api_url = "https://60api.09cdn.xyz/v2/today-in-history" # 历史上的今天API地址
-send_image = true                                           # 是否发送新闻图片
-send_text = false                                            # 是否发送新闻文本
+ai_news_api_url = "https://60api.09cdn.xyz/v2/ai-news"         # 每日AI资讯API地址
+send_image = true                                           # 是否发送60秒新闻图片
+send_text = false                                            # 是否发送60秒新闻文本
 max_history_events = 10                                     # 历史事件最大显示数量
+max_ai_news = 5                                             # AI资讯最大显示数量
 
 # ============ 音乐功能配置 ============
 [music]
@@ -63,6 +65,7 @@ auto_image_enabled = true                                   # 是否启用自动
 # 新闻功能：
 # - 命令触发：/news 或 /新闻 （查看每天60秒新闻）
 # - 命令触发：/history 或 /历史 （查看历史上的今天）
+# - 命令触发：/ainews 或 /ai新闻 或 /ai资讯 （查看每日AI资讯）
 #
 # 音乐功能：
 # - 搜索音乐：/music [音源] 歌曲名

@@ -205,14 +205,17 @@ async def send_music_info_to_command(
         # 发送音乐卡片或语音
         send_as_voice = config_getter("music.send_as_voice", False) or (music_source == "qq")
 
+        # 构建 display_message，用于存储到聊天记录中供后续查询
+        music_display_message = f"[音乐：《{song}》- {singer}]"
+
         if send_as_voice:
             if url:
-                await component.send_custom(message_type="voiceurl", content=url)
+                await component.send_custom(message_type="voiceurl", content=url, display_message=music_display_message)
             else:
                 await component.send_text("❌ 无法获取音乐播放链接")
         else:
             if song_id:
-                await component.send_custom(message_type="music", content=song_id)
+                await component.send_custom(message_type="music", content=song_id, display_message=music_display_message)
 
         # 发送封面
         if cover and config_getter("music.show_cover", True):
@@ -279,14 +282,17 @@ async def send_music_info_to_stream(
         # 发送音乐卡片或语音
         send_as_voice = config_getter("music.send_as_voice", False) or (music_source == "qq")
 
+        # 构建 display_message，用于存储到聊天记录中供后续查询
+        music_display_message = f"[音乐：《{song}》- {singer}]"
+
         if send_as_voice:
             if url:
-                await send_api.custom_to_stream("voiceurl", url, stream_id)
+                await send_api.custom_to_stream("voiceurl", url, stream_id, display_message=music_display_message)
             else:
                 logger.warning("无法获取音乐播放链接")
         else:
             if song_id:
-                await send_api.custom_to_stream("music", song_id, stream_id)
+                await send_api.custom_to_stream("music", song_id, stream_id, display_message=music_display_message)
 
         # 发送封面
         if cover and config_getter("music.show_cover", True):
@@ -1139,7 +1145,7 @@ class PlayMusicTool(BaseTool):
     """播放音乐 Tool - 供AI主动调用"""
 
     name = "play_music"
-    description = "搜索并播放音乐。用户要求听歌、播放歌曲时调用。支持多音源(网易云/QQ音乐/VIP音质/聚合)。重要：用户未指定歌名时，AI需根据上下文/情绪推荐合适的歌曲"
+    description = "搜索并播放音乐。仅在用户**明确要求**听歌/放歌/播放音乐时调用（如：'放首歌'、'来首音乐'、'播放xxx'、'听歌'等明确指令）。禁止在日常对话中随意触发（如聊天提到食物名、地名等不要误判为歌曲）。用户未指定歌名时可推荐热门歌曲"
     parameters = [
         ("song_name", ToolParamType.STRING, "歌曲名称或歌手+歌名，必填。AI需要填写具体歌名，不能为空", True, None),
         ("source", ToolParamType.STRING, "音乐源，可选netease(网易云)、qq(QQ音乐)、netease_vip(网易云VIP)、qq_vip(QQ音乐VIP)、juhe(聚合点歌)，默认netease", False, ["netease", "qq", "netease_vip", "qq_vip", "juhe"])

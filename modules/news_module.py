@@ -1,7 +1,7 @@
 """
 新闻模块 - 每天60秒读懂世界
 
-提供每日新闻摘要和历史上的今天等功能
+提供每日新闻摘要、历史上的今天、AI资讯等功能
 """
 
 import aiohttp
@@ -114,7 +114,9 @@ class TodayInHistoryTool(BaseTool):
                     data = await response.json()
 
                     if data.get("code") == 200:
-                        events = data.get("data", [])
+                        # API 返回格式: {"data": {"date": "...", "items": [...]}}
+                        data_obj = data.get("data", {})
+                        events = data_obj.get("items", []) if isinstance(data_obj, dict) else data_obj
 
                         if not events:
                             return {"name": self.name, "content": "暂无历史事件数据"}
@@ -141,6 +143,76 @@ class TodayInHistoryTool(BaseTool):
         except Exception as e:
             logger.error(f"获取历史上的今天失败: {e}", exc_info=True)
             return {"name": self.name, "content": f"获取历史事件失败: {str(e)}"}
+
+
+class AINewsTool(BaseTool):
+    """获取每日AI资讯的工具"""
+
+    name = "get_ai_news"
+    description = "获取今日AI领域新闻资讯(含标题+摘要+来源)。用户问AI/人工智能相关新闻时调用"
+    parameters = [
+        ("limit", ToolParamType.INTEGER, "返回的新闻数量，默认为5", False, None)
+    ]
+    available_for_llm = True
+
+    async def execute(self, function_args: dict[str, Any]) -> dict[str, Any]:
+        """获取每日AI资讯"""
+        try:
+            limit = function_args.get("limit", 5)
+
+            api_url = self.get_config(
+                "news.ai_news_api_url",
+                "https://60s.viki.moe/v2/ai-news"
+            )
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url, timeout=15) as response:
+                    if response.status != 200:
+                        return {
+                            "name": self.name,
+                            "content": f"获取AI资讯失败，HTTP状态码: {response.status}"
+                        }
+
+                    data = await response.json()
+
+                    if data.get("code") == 200:
+                        news_data = data.get("data", {})
+                        news_list = news_data.get("news", [])
+
+                        if not news_list:
+                            return {"name": self.name, "content": "暂无AI资讯数据"}
+
+                        # 限制数量
+                        news_list = news_list[:limit]
+
+                        # 格式化AI资讯
+                        result = "🤖 每日AI资讯\n\n"
+                        for i, news in enumerate(news_list, 1):
+                            title = news.get("title", "")
+                            detail = news.get("detail", "")
+                            source = news.get("source", "")
+                            link = news.get("link", "")
+                            result += f"{i}. {title}\n"
+                            if detail:
+                                result += f"   {detail}\n"
+                            if source:
+                                result += f"   来源: {source}\n"
+                            if link:
+                                result += f"   链接: {link}\n"
+                            result += "\n"
+
+                        return {"name": self.name, "content": result.strip()}
+                    else:
+                        return {
+                            "name": self.name,
+                            "content": f"获取AI资讯失败: {data.get('message', '未知错误')}"
+                        }
+
+        except asyncio.TimeoutError:
+            return {"name": self.name, "content": "获取AI资讯超时，请稍后再试"}
+        except Exception as e:
+            logger.error(f"获取AI资讯失败: {e}", exc_info=True)
+            return {"name": self.name, "content": f"获取AI资讯失败: {str(e)}"}
 
 
 class NewsCommand(BaseCommand):
@@ -235,7 +307,9 @@ class HistoryCommand(BaseCommand):
                     data = await response.json()
 
                     if data.get("code") == 200:
-                        events = data.get("data", [])
+                        # API 返回格式: {"data": {"date": "...", "items": [...]}}
+                        data_obj = data.get("data", {})
+                        events = data_obj.get("items", []) if isinstance(data_obj, dict) else data_obj
 
                         if not events:
                             await self.send_text("暂时没有历史事件数据")
@@ -261,4 +335,68 @@ class HistoryCommand(BaseCommand):
         except Exception as e:
             logger.error(f"查询历史事件失败: {e}", exc_info=True)
             await self.send_text("查询历史事件时出错了")
+            return False, str(e), True
+
+
+class AINewsCommand(BaseCommand):
+    """AI资讯 Command - 通过命令查询AI新闻"""
+
+    command_name = "ainews"
+    command_description = "查询每日AI资讯"
+    command_pattern = r"^/(ainews|ai新闻|AI新闻|ai资讯|AI资讯)$"
+    intercept_message = True
+
+    async def execute(self) -> Tuple[bool, str, bool]:
+        """执行AI资讯查询命令"""
+        try:
+            api_url = self.get_config(
+                "news.ai_news_api_url",
+                "https://60s.viki.moe/v2/ai-news"
+            )
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url, timeout=15) as response:
+                    if response.status != 200:
+                        await self.send_text("获取AI资讯失败，请稍后再试")
+                        return False, f"HTTP错误: {response.status}", True
+
+                    data = await response.json()
+
+                    if data.get("code") == 200:
+                        news_data = data.get("data", {})
+                        news_list = news_data.get("news", [])
+
+                        if not news_list:
+                            await self.send_text("暂时没有AI资讯数据")
+                            return False, "无AI资讯数据", True
+
+                        # 限制数量
+                        max_news = int(self.get_config("news.max_ai_news", 5))
+                        news_list = news_list[:max_news]
+
+                        # 格式化
+                        message = "🤖 每日AI资讯\n\n"
+                        for i, news in enumerate(news_list, 1):
+                            title = news.get("title", "")
+                            detail = news.get("detail", "")
+                            source = news.get("source", "")
+                            link = news.get("link", "")
+                            message += f"{i}. {title}\n"
+                            if detail:
+                                message += f"   {detail}\n"
+                            if source:
+                                message += f"   来源: {source}\n"
+                            if link:
+                                message += f"   链接: {link}\n"
+                            message += "\n"
+
+                        await self.send_text(message.strip())
+                        return True, "发送AI资讯成功", True
+                    else:
+                        await self.send_text("获取AI资讯失败")
+                        return False, f"API错误: {data.get('message')}", True
+
+        except Exception as e:
+            logger.error(f"查询AI资讯失败: {e}", exc_info=True)
+            await self.send_text("查询AI资讯时出错了")
             return False, str(e), True
