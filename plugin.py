@@ -169,17 +169,17 @@ class EntertainmentPlugin(BasePlugin):
         "news": {
             "api_url": ConfigField(
                 type=str,
-                default="https://60s.viki.moe/v2/60s",
+                default="https://60s.7se.cn/v2/60s",
                 description="60秒新闻API地址"
             ),
             "history_api_url": ConfigField(
                 type=str,
-                default="https://60s.viki.moe/v2/today-in-history",
+                default="https://60s.7se.cn/v2/today-in-history",
                 description="历史上的今天API地址"
             ),
             "ai_news_api_url": ConfigField(
                 type=str,
-                default="https://60s.viki.moe/v2/ai-news",
+                default="https://60s.7se.cn/v2/ai-news",
                 description="每日AI资讯API地址"
             ),
             "send_image": ConfigField(

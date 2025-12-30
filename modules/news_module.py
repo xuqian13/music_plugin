@@ -33,7 +33,7 @@ class News60sTool(BaseTool):
 
             api_url = self.get_config(
                 "news.api_url",
-                "https://60s.viki.moe/v2/60s"
+                "https://60s.7se.cn/v2/60s"
             )
 
             async with aiohttp.ClientSession() as session:
@@ -100,7 +100,7 @@ class TodayInHistoryTool(BaseTool):
 
             api_url = self.get_config(
                 "news.history_api_url",
-                "https://60s.viki.moe/v2/today-in-history"
+                "https://60s.7se.cn/v2/today-in-history"
             )
 
             async with aiohttp.ClientSession() as session:
@@ -162,7 +162,7 @@ class AINewsTool(BaseTool):
 
             api_url = self.get_config(
                 "news.ai_news_api_url",
-                "https://60s.viki.moe/v2/ai-news"
+                "https://60s.7se.cn/v2/ai-news"
             )
 
             async with aiohttp.ClientSession() as session:
@@ -228,7 +228,7 @@ class NewsCommand(BaseCommand):
         try:
             api_url = self.get_config(
                 "news.api_url",
-                "https://60s.viki.moe/v2/60s"
+                "https://60s.7se.cn/v2/60s"
             )
 
             async with aiohttp.ClientSession() as session:
@@ -295,7 +295,7 @@ class HistoryCommand(BaseCommand):
         try:
             api_url = self.get_config(
                 "news.history_api_url",
-                "https://60s.viki.moe/v2/today-in-history"
+                "https://60s.7se.cn/v2/today-in-history"
             )
 
             async with aiohttp.ClientSession() as session:
@@ -351,7 +351,7 @@ class AINewsCommand(BaseCommand):
         try:
             api_url = self.get_config(
                 "news.ai_news_api_url",
-                "https://60s.viki.moe/v2/ai-news"
+                "https://60s.7se.cn/v2/ai-news"
             )
 
             async with aiohttp.ClientSession() as session:
