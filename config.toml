@@ -24,9 +24,9 @@ available_classes = [101, 102, 103, 104]                    # 可用的图片类
 
 # ============ 新闻功能配置 ============
 [news]
-api_url = "https://60api.09cdn.xyz/v2/60s"                     # 60秒新闻API地址
-history_api_url = "https://60api.09cdn.xyz/v2/today-in-history" # 历史上的今天API地址
-ai_news_api_url = "https://60api.09cdn.xyz/v2/ai-news"         # 每日AI资讯API地址
+api_url = "https://60s.7se.cn/v2/60s"                     # 60秒新闻API地址
+history_api_url = "https://60s.7se.cn/v2/today-in-history" # 历史上的今天API地址
+ai_news_api_url = "https://60s.7se.cn/v2/ai-news"         # 每日AI资讯API地址
 send_image = true                                           # 是否发送60秒新闻图片
 send_text = false                                            # 是否发送60秒新闻文本
 max_history_events = 10                                     # 历史事件最大显示数量
